@@ -1,0 +1,13 @@
+# deps / build / secrets
+node_modules/
+dist/
+build/
+.vite/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+*.tsbuildinfo
+.cache/
+server/.cache/

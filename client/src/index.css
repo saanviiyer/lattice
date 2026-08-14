@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #0b0f17;
+  color: #e5e7eb;
+}
+
+/* ---- PDF.js text layer (selectable, positioned text over the canvas) ---- */
+.lat-page {
+  position: relative;
+  background: #fff;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.4);
+}
+.lat-page canvas {
+  display: block;
+}
+.textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 1;
+  line-height: 1;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 2;
+}
+.textLayer span,
+.textLayer br {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+.textLayer ::selection {
+  background: rgba(59, 130, 246, 0.4);
+}
+.textLayer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: -1;
+  cursor: default;
+  user-select: none;
+}
+
+/* ---- Highlight overlay (below the text layer so text stays selectable) ---- */
+.lat-highlight-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.lat-highlight {
+  position: absolute;
+  border-radius: 2px;
+  pointer-events: auto;
+  cursor: pointer;
+  mix-blend-mode: multiply;
+}
+.lat-hl-yellow {
+  background: rgba(250, 204, 21, 0.45);
+}
+.lat-hl-green {
+  background: rgba(34, 197, 94, 0.4);
+}
+.lat-hl-blue {
+  background: rgba(59, 130, 246, 0.4);
+}
+.lat-hl-pink {
+  background: rgba(236, 72, 153, 0.4);
+}
+.lat-hl-orange {
+  background: rgba(249, 115, 22, 0.42);
+}
+
+/* ---- Rendered markdown note preview ---- */
+.lat-prose h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0.6em 0 0.3em;
+}
+.lat-prose h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0.6em 0 0.3em;
+}
+.lat-prose h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.5em 0 0.25em;
+}
+.lat-prose p {
+  margin: 0.5em 0;
+  line-height: 1.6;
+}
+.lat-prose ul {
+  margin: 0.4em 0;
+  padding-left: 1.4em;
+  list-style: disc;
+}
+.lat-prose li {
+  margin: 0.15em 0;
+}
+.lat-prose code {
+  background: rgba(148, 163, 184, 0.2);
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+.lat-prose blockquote {
+  border-left: 3px solid #475569;
+  padding-left: 0.8em;
+  color: #94a3b8;
+  margin: 0.5em 0;
+}
+.lat-prose a {
+  color: #93c5fd;
+}
+.lat-wikilink {
+  color: #a5b4fc;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(165, 180, 252, 0.4);
+  cursor: pointer;
+}
+.lat-wikilink-new {
+  color: #f0abfc;
+  border-bottom-style: dashed;
+}

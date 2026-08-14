@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: lattice
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      # Leave unset to run in MOCK MODE (demoable with no key). Set a real key
+      # in the Render dashboard to use the live Anthropic API.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # Render injects PORT automatically; the server honors process.env.PORT.

@@ -1,0 +1,30 @@
+{
+  "name": "lattice",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A research knowledge workspace: annotate paper PDFs, write linked notes with wikilinks and backlinks, and see it all in a force directed knowledge graph.",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c blue,magenta \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "node server/index.js",
+    "dev:client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "start": "NODE_ENV=production node server/index.js",
+    "test": "npm --prefix client run test",
+    "postinstall": "npm --prefix client install"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "multer": "^2.2.0",
+    "unpdf": "^0.12.2"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "overrides": {
+    "tar": "^7.5.22"
+  }
+}
