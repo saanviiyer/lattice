@@ -1,13 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import type { Collection, Note, Paper, PaperMetadata } from "./types";
 import { repo } from "./lib/repository";
 import { deletePdf, putPdf } from "./lib/blobStore";
 import { getHealth } from "./lib/api";
 import { buildGraph } from "./lib/graph";
-import AddPaper from "./components/AddPaper";
-import PaperView from "./components/PaperView";
-import NoteEditor from "./components/NoteEditor";
-import GraphView from "./components/GraphView";
+import {
+  createWorkspaceBackup,
+  restoreWorkspaceBackup,
+  workspaceBackupFilename,
+} from "./lib/workspaceBackup";
+const AddPaper = lazy(() => import("./components/AddPaper"));
+const PaperView = lazy(() => import("./components/PaperView"));
+const NoteEditor = lazy(() => import("./components/NoteEditor"));
+const GraphView = lazy(() => import("./components/GraphView"));
 import {
   IconGraph,
   IconLibrary,
@@ -35,6 +40,7 @@ export default function App() {
   const [health, setHealth] = useState<{ mockMode: boolean; model: string } | null>(
     null
   );
+  const [backupStatus, setBackupStatus] = useState("");
 
   useEffect(() => {
     getHealth()
@@ -126,6 +132,37 @@ export default function App() {
     repo.deleteCollection(c.id);
     if (collectionFilter === c.id) setCollectionFilter(null);
     refresh();
+  }
+
+  async function exportWorkspace() {
+    setBackupStatus("Exporting…");
+    try {
+      const backup = await createWorkspaceBackup();
+      const url = URL.createObjectURL(backup);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = workspaceBackupFilename();
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+      setBackupStatus("Backup saved");
+    } catch (error) {
+      setBackupStatus(error instanceof Error ? error.message : "Backup failed");
+    }
+  }
+
+  async function importWorkspace(file: File) {
+    if (!confirm("Replace this browser's entire lattice workspace with this backup?")) return;
+    setBackupStatus("Restoring…");
+    try {
+      const snapshot = await restoreWorkspaceBackup(file);
+      setView({ kind: "library" });
+      setCollectionFilter(null);
+      setTagFilter(null);
+      refresh();
+      setBackupStatus(`Restored ${snapshot.papers.length} papers`);
+    } catch (error) {
+      setBackupStatus(error instanceof Error ? error.message : "Restore failed");
+    }
   }
 
   // ---- Render helpers ----
@@ -289,7 +326,29 @@ export default function App() {
           </ul>
         </div>
 
-        <div className="px-4 py-2 border-t border-slate-800 text-[11px] text-slate-500">
+        <div className="px-3 py-2 border-t border-slate-800 text-[11px] text-slate-500 space-y-2">
+          <div className="flex gap-1">
+            <button
+              onClick={exportWorkspace}
+              className="flex-1 bg-slate-800 hover:bg-slate-700 rounded px-2 py-1 text-slate-300"
+            >
+              Backup
+            </button>
+            <label className="flex-1 text-center bg-slate-800 hover:bg-slate-700 rounded px-2 py-1 text-slate-300 cursor-pointer">
+              Restore
+              <input
+                type="file"
+                accept=".lattice,application/zip"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void importWorkspace(file);
+                  event.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+          {backupStatus && <div className="truncate" title={backupStatus}>{backupStatus}</div>}
           {health
             ? health.mockMode
               ? "AI: mock mode (no key)"
@@ -300,12 +359,15 @@ export default function App() {
 
       {/* Main */}
       <main className="flex-1 min-w-0 flex flex-col">
+        <Suspense fallback={<LoadingView />}>
         {view.kind === "paper" && activePaper ? (
           <PaperView
             paper={activePaper}
+            collections={collections}
             onBack={() => setView({ kind: "library" })}
             onOpenPaperNote={openPaperNote}
             onNoteCreated={refresh}
+            onPaperUpdated={refresh}
           />
         ) : view.kind === "note" && activeNote ? (
           <NoteView
@@ -363,9 +425,22 @@ export default function App() {
             }
           />
         )}
+        </Suspense>
       </main>
 
-      {showAdd && <AddPaper onAdd={handleAdd} onClose={() => setShowAdd(false)} />}
+      {showAdd && (
+        <Suspense fallback={null}>
+          <AddPaper onAdd={handleAdd} onClose={() => setShowAdd(false)} />
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
+function LoadingView() {
+  return (
+    <div className="h-full grid place-items-center text-sm text-slate-500" role="status">
+      Loading…
     </div>
   );
 }
@@ -523,24 +598,26 @@ function NoteView({
         </button>
       </div>
       <div className="flex-1 min-h-0 p-4">
-        <NoteEditor
-          note={note}
-          papers={papers}
-          notes={notes}
-          onChangeBody={(body) => {
-            repo.updateNote(note.id, { body });
-            onChange();
-          }}
-          onChangeTitle={(title) => {
-            repo.updateNote(note.id, { title });
-            onChange();
-          }}
-          onOpenTarget={(t) => {
-            if (t.id && t.type === "paper") onOpenPaper(t.id);
-            else if (t.id && t.type === "note") onOpenNote(t.id);
-            else if (!t.id) onCreateNoteByTitle(t.title);
-          }}
-        />
+        <Suspense fallback={<LoadingView />}>
+          <NoteEditor
+            note={note}
+            papers={papers}
+            notes={notes}
+            onChangeBody={(body) => {
+              repo.updateNote(note.id, { body });
+              onChange();
+            }}
+            onChangeTitle={(title) => {
+              repo.updateNote(note.id, { title });
+              onChange();
+            }}
+            onOpenTarget={(t) => {
+              if (t.id && t.type === "paper") onOpenPaper(t.id);
+              else if (t.id && t.type === "note") onOpenNote(t.id);
+              else if (!t.id) onCreateNoteByTitle(t.title);
+            }}
+          />
+        </Suspense>
       </div>
     </div>
   );

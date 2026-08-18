@@ -18,14 +18,67 @@ import { explainHighlight, synthesizeNote, MOCK_MODE, MODEL } from "./ai.js";
 
 dotenv.config();
 
-const PORT = process.env.PORT || 3001;
+const PORT = Number(process.env.PORT) || 3001;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_DIST = path.resolve(__dirname, "../client/dist");
 
 const app = express();
-app.use(cors());
+app.disable("x-powered-by");
+app.set("trust proxy", 1);
+if (process.env.NODE_ENV !== "production" || process.env.CORS_ORIGIN) {
+  app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
+}
+app.use((_req, res, next) => {
+  res.set({
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  });
+  next();
+});
 app.use(express.json({ limit: "8mb" }));
-app.use(express.static(CLIENT_DIST));
+app.use(express.static(CLIENT_DIST, {
+  etag: true,
+  maxAge: process.env.NODE_ENV === "production" ? "1h" : 0,
+  setHeaders(res, filePath) {
+    if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    }
+  },
+}));
+
+// Lightweight per-instance protection for endpoints that can trigger costly
+// upstream/API work. A managed edge limiter should be added for multi-instance
+// deployments; this still prevents accidental bursts on a single instance.
+const requestBuckets = new Map();
+function rateLimit({ windowMs, max }) {
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = req.ip || req.socket.remoteAddress || "unknown";
+    const bucket = requestBuckets.get(key);
+    if (!bucket || now - bucket.startedAt >= windowMs) {
+      requestBuckets.set(key, { startedAt: now, count: 1 });
+      return next();
+    }
+    bucket.count += 1;
+    if (bucket.count > max) {
+      res.setHeader("Retry-After", String(Math.ceil((windowMs - (now - bucket.startedAt)) / 1000)));
+      return res.status(429).json({ error: "Too many requests. Please try again shortly." });
+    }
+    next();
+  };
+}
+const apiLimit = rateLimit({ windowMs: 60_000, max: 60 });
+const aiLimit = rateLimit({ windowMs: 60_000, max: 12 });
+app.use("/api", apiLimit);
+app.use("/api/ai", aiLimit);
+
+setInterval(() => {
+  const cutoff = Date.now() - 120_000;
+  for (const [key, bucket] of requestBuckets) {
+    if (bucket.startedAt < cutoff) requestBuckets.delete(key);
+  }
+}, 60_000).unref();
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -36,6 +89,7 @@ const upload = multer({
 // Health
 // ---------------------------------------------------------------------------
 app.get("/api/health", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
   res.json({ ok: true, mockMode: MOCK_MODE, model: MODEL });
 });
 
@@ -132,6 +186,12 @@ app.post("/api/metadata/pdf", upload.single("file"), async (req, res) => {
 // ---------------------------------------------------------------------------
 app.post("/api/ai/explain", async (req, res) => {
   const { text = "", context = "" } = req.body || {};
+  if (typeof text !== "string" || typeof context !== "string") {
+    return res.status(400).json({ error: "Text and context must be strings." });
+  }
+  if (text.length > 12_000 || context.length > 40_000) {
+    return res.status(413).json({ error: "Selection or context is too large." });
+  }
   try {
     const result = await explainHighlight(text, context);
     res.json(result);
@@ -147,6 +207,12 @@ app.post("/api/ai/explain", async (req, res) => {
 // ---------------------------------------------------------------------------
 app.post("/api/ai/synthesize", async (req, res) => {
   const { paperTitle = "", highlights = [] } = req.body || {};
+  if (typeof paperTitle !== "string" || !Array.isArray(highlights)) {
+    return res.status(400).json({ error: "Invalid synthesis request." });
+  }
+  if (paperTitle.length > 1_000 || highlights.length > 250) {
+    return res.status(413).json({ error: "Synthesis request is too large." });
+  }
   try {
     const result = await synthesizeNote(paperTitle, highlights);
     res.json(result);

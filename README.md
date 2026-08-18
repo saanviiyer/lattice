@@ -42,6 +42,13 @@ npm start          # Express serves the built client + /api on one $PORT (defaul
 
 Then open http://localhost:3001.
 
+Production responses include baseline security headers, immutable caching for
+hashed assets, same-origin CORS by default, request-size validation, and
+per-instance rate limits on upstream and AI endpoints. When the UI is hosted on
+a separate origin, set `CORS_ORIGIN` to that exact origin. For horizontally
+scaled production deployments, enforce a shared rate limit at the hosting edge
+as well.
+
 ### Tests and type checking
 
 ```bash
@@ -65,11 +72,20 @@ docker run -p 3001:3001 -e ANTHROPIC_API_KEY=... lattice
 
 ### Fully working
 
-- **Paper library (Zotero side).** Import by DOI (CrossRef), arXiv id or URL (arXiv API), or PDF upload (server extracts text with unpdf and guesses metadata, resolving an embedded DOI through CrossRef when present). Collections, tags, full text search over the library, and a library sidebar. Duplicate papers merge by DOI, arXiv id, or normalized title.
+- **Paper library (Zotero side).** Import by DOI (CrossRef), arXiv id or URL (arXiv API), or PDF upload (server extracts text with unpdf and guesses metadata, resolving an embedded DOI through CrossRef when present). Collections, editable per-paper tags and collection membership, full text search over the library, and a library sidebar. Duplicate papers merge by DOI, arXiv id, or normalized title.
 - **PDF storage split.** Uploaded PDF file bytes are stored as a blob in **IndexedDB**; all metadata, annotations, notes, and links go through a single repository abstraction backed by **localStorage**. Nothing is uploaded to the server for persistence.
 - **PDF annotation (the core).** A paper's PDF renders with pdf.js including the selectable text layer. Selecting text creates a highlight in one of five colors. Each highlight stores `{ paperId, page, rects, text, color, note }` with rects normalized as fractions of the page, so highlights **re-anchor at any zoom and persist across reloads**. A sidebar lists highlights; clicking one scrolls to it; clicking a highlight (or its list row) lets you add or edit a note and change its color.
 - **Linked notes (Obsidian plus Notion sides).** A block editor (see below) for standalone notes and per paper notes docs, with `[[wikilink]]` autocomplete that suggests papers and notes. Links are parsed and a **backlinks panel** shows what links to the current note. Each paper has a dedicated notes doc (the Notes button).
 - **Knowledge graph (P1).** A force directed graph (d3-force on a canvas) of papers and notes as nodes, with `[[wikilink]]` edges and the implicit paper to note relation. Drag nodes; click a node to open it.
+- **Annotated PDF export.** Download the original PDF with every lattice
+  highlight embedded as a standard, portable PDF Highlight annotation. Attached
+  notes are stored as annotation contents and appear in compatible PDF readers'
+  comments sidebars; the original page text remains selectable.
+- **Complete workspace backup and restore.** A single dated `.lattice` archive
+  contains papers, collections, tags, notes, backlinks, highlights, and the
+  original PDF blobs. Restore validates the archive and reconstructs both
+  localStorage and IndexedDB, so a workspace can move between browsers or be
+  kept as an offline backup.
 - **AI actions (P2), with mock fallback.** Explain a highlight, and synthesize a paper's highlights into a Markdown note. Uses `claude-sonnet-5` when `ANTHROPIC_API_KEY` is set; otherwise a realistic structured mock. The synthesis is saved as a new note linked to the paper.
 
 ### MVP level (works, but intentionally lightweight)
@@ -81,7 +97,6 @@ docker run -p 3001:3001 -e ANTHROPIC_API_KEY=... lattice
 ### Not implemented (stubs / out of scope for this MVP)
 
 - **Supabase / auth / multi device sync.** Documented below as the upgrade path; not implemented. All data is local to the browser.
-- **PDF export of highlights** as real PDF annotations. Highlights serialize to a PDF style quadpoints form internally (and round trip is unit tested), but writing them back into a `.pdf` file is not implemented.
 - **Rich collaborative editing, drag to reorder blocks, nested lists, and inline images** in the note editor.
 
 ### An honest note on browser verification

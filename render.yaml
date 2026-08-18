@@ -3,8 +3,9 @@ services:
     name: lattice
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     startCommand: npm start
+    healthCheckPath: /api/health
     envVars:
       # Leave unset to run in MOCK MODE (demoable with no key). Set a real key
       # in the Render dashboard to use the live Anthropic API.

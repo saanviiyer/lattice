@@ -48,6 +48,19 @@ export interface Repository {
   createNote(input: { title: string; body?: string; paperId?: string }): Note;
   updateNote(id: string, patch: Partial<Note>): void;
   deleteNote(id: string): void;
+
+  // Complete metadata/annotation/note snapshots for portable backups.
+  exportWorkspace(): WorkspaceSnapshot;
+  replaceWorkspace(snapshot: WorkspaceSnapshot): void;
+}
+
+export interface WorkspaceSnapshot {
+  version: 1;
+  exportedAt: string;
+  papers: Paper[];
+  collections: Collection[];
+  highlights: Highlight[];
+  notes: Note[];
 }
 
 const PAPERS_KEY = "lattice.papers.v1";
@@ -267,6 +280,27 @@ class LocalStorageRepository implements Repository {
   }
   deleteNote(id: string) {
     this.notes = this.notes.filter((n) => n.id !== id);
+    this.persistNotes();
+  }
+
+  exportWorkspace(): WorkspaceSnapshot {
+    return {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      papers: structuredClone(this.papers),
+      collections: structuredClone(this.collections),
+      highlights: structuredClone(this.highlights),
+      notes: structuredClone(this.notes),
+    };
+  }
+  replaceWorkspace(snapshot: WorkspaceSnapshot) {
+    this.papers = structuredClone(snapshot.papers);
+    this.collections = structuredClone(snapshot.collections);
+    this.highlights = structuredClone(snapshot.highlights);
+    this.notes = structuredClone(snapshot.notes);
+    this.persistPapers();
+    this.persistCollections();
+    this.persistHighlights();
     this.persistNotes();
   }
 }

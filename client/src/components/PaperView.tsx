@@ -3,19 +3,22 @@
 // into a note).
 
 import { useEffect, useState } from "react";
-import type { Highlight, HighlightColor, Paper } from "../types";
+import type { Collection, Highlight, HighlightColor, Paper } from "../types";
 import { HIGHLIGHT_COLORS } from "../types";
 import { repo } from "../lib/repository";
 import { getPdf } from "../lib/blobStore";
 import { explainHighlight, synthesizeNote } from "../lib/api";
+import { annotatedPdfFilename, createAnnotatedPdf } from "../lib/annotatedPdf";
 import PdfReader from "./PdfReader";
 import { IconSparkle, IconTrash, IconNote, IconBack } from "./Icons";
 
 interface Props {
   paper: Paper;
+  collections: Collection[];
   onBack: () => void;
   onOpenPaperNote: (paperId: string) => void;
   onNoteCreated: () => void;
+  onPaperUpdated: () => void;
 }
 
 const COLOR_SWATCH: Record<HighlightColor, string> = {
@@ -28,9 +31,11 @@ const COLOR_SWATCH: Record<HighlightColor, string> = {
 
 export default function PaperView({
   paper,
+  collections,
   onBack,
   onOpenPaperNote,
   onNoteCreated,
+  onPaperUpdated,
 }: Props) {
   const [blob, setBlob] = useState<Blob | null>(null);
   const [blobState, setBlobState] = useState<"loading" | "none" | "ready">(
@@ -44,6 +49,9 @@ export default function PaperView({
   const [status, setStatus] = useState("");
   const [aiText, setAiText] = useState<{ id: string; text: string } | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [tagDraft, setTagDraft] = useState(paper.tags.join(", "));
 
   function refreshHighlights() {
     setHighlights(repo.listHighlights(paper.id));
@@ -67,6 +75,26 @@ export default function PaperView({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paper.id]);
+
+  useEffect(() => setTagDraft(paper.tags.join(", ")), [paper.id, paper.tags]);
+
+  function saveTags() {
+    const tags = tagDraft
+      .split(",")
+      .map((tag) => tag.trim().replace(/^#/, ""))
+      .filter(Boolean);
+    repo.setPaperTags(paper.id, tags);
+    setTagDraft(repo.getPaper(paper.id)?.tags.join(", ") || "");
+    onPaperUpdated();
+  }
+
+  function toggleCollection(id: string) {
+    const next = paper.collectionIds.includes(id)
+      ? paper.collectionIds.filter((collectionId) => collectionId !== id)
+      : [...paper.collectionIds, id];
+    repo.setPaperCollections(paper.id, next);
+    onPaperUpdated();
+  }
 
   function createHighlight(h: { page: number; text: string; rects: Highlight["rects"] }) {
     const created = repo.addHighlight({
@@ -130,6 +158,28 @@ export default function PaperView({
     }
   }
 
+  async function exportAnnotatedPdf() {
+    if (!blob) return;
+    setExportBusy(true);
+    setStatus("Creating annotated PDF…");
+    try {
+      const output = await createAnnotatedPdf(blob, highlights);
+      const url = URL.createObjectURL(output);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = annotatedPdfFilename(paper.title);
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+      setStatus(
+        `Exported ${highlights.length} highlight${highlights.length === 1 ? "" : "s"} as PDF annotations.`
+      );
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "PDF export failed.");
+    } finally {
+      setExportBusy(false);
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -149,12 +199,70 @@ export default function PaperView({
           </div>
         </div>
         <button
+          onClick={() => setShowDetails((visible) => !visible)}
+          className={`text-sm rounded-md px-3 py-1.5 ${
+            showDetails ? "bg-indigo-600" : "bg-slate-800 hover:bg-slate-700"
+          }`}
+        >
+          Organize
+        </button>
+        <button
           onClick={() => onOpenPaperNote(paper.id)}
           className="text-sm flex items-center gap-1 bg-slate-800 hover:bg-slate-700 rounded-md px-3 py-1.5"
         >
           <IconNote /> Notes
         </button>
+        {blob && (
+          <button
+            onClick={exportAnnotatedPdf}
+            disabled={exportBusy}
+            className="text-sm bg-slate-800 hover:bg-slate-700 disabled:opacity-50 rounded-md px-3 py-1.5"
+            title="Download the PDF with portable highlight annotations"
+          >
+            {exportBusy ? "Exporting…" : "Export annotated PDF"}
+          </button>
+        )}
       </div>
+
+      {showDetails && (
+        <div className="border-b border-slate-800 bg-slate-900/70 px-4 py-3 grid gap-4 lg:grid-cols-2">
+          <label className="text-xs text-slate-400">
+            Tags <span className="text-slate-600">(comma separated)</span>
+            <input
+              value={tagDraft}
+              onChange={(event) => setTagDraft(event.target.value)}
+              onBlur={saveTags}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+              placeholder="methods, transformers, to-read"
+              className="mt-1 block w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-indigo-500"
+            />
+          </label>
+          <fieldset>
+            <legend className="text-xs text-slate-400 mb-1">Collections</legend>
+            <div className="flex flex-wrap gap-2">
+              {collections.map((collection) => (
+                <label
+                  key={collection.id}
+                  className="flex items-center gap-1.5 bg-slate-800 rounded px-2 py-1 text-xs cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={paper.collectionIds.includes(collection.id)}
+                    onChange={() => toggleCollection(collection.id)}
+                    className="accent-indigo-500"
+                  />
+                  {collection.name}
+                </label>
+              ))}
+              {collections.length === 0 && (
+                <span className="text-xs text-slate-600">Create a collection from the sidebar first.</span>
+              )}
+            </div>
+          </fieldset>
+        </div>
+      )}
 
       <div className="flex flex-1 min-h-0">
         {/* PDF surface */}

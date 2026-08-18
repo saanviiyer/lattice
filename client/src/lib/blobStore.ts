@@ -60,6 +60,10 @@ export async function deletePdf(paperId: string): Promise<void> {
   await tx("readwrite", (store) => store.delete(paperId));
 }
 
+export async function clearPdfs(): Promise<void> {
+  await tx("readwrite", (store) => store.clear());
+}
+
 // True if a PDF blob exists for this paper.
 export async function hasPdf(paperId: string): Promise<boolean> {
   const key = await tx<IDBValidKey | undefined>("readonly", (store) =>

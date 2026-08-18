@@ -6,7 +6,7 @@ WORKDIR /app
 # Root postinstall runs `npm --prefix client install`, so copy both manifests.
 COPY package.json package-lock.json* ./
 COPY client/package.json client/package-lock.json* ./client/
-RUN npm install
+RUN npm ci
 COPY . .
 RUN npm run build
 
@@ -17,7 +17,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 # Runtime deps only. --ignore-scripts skips the client postinstall: the runtime
 # needs the built client/dist (copied below), not the client's dev toolchain.
-RUN npm install --omit=dev --ignore-scripts
+RUN npm ci --omit=dev --ignore-scripts
 COPY server ./server
 COPY --from=build /app/client/dist ./client/dist
 
