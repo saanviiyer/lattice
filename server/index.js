@@ -34,12 +34,30 @@ app.set("trust proxy", 1);
 if (process.env.NODE_ENV !== "production" || process.env.CORS_ORIGIN) {
   app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
 }
-app.use((_req, res, next) => {
+app.use((req, res, next) => {
   res.set({
     "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Content-Security-Policy": [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "connect-src 'self'",
+      "font-src 'self' data:",
+      "frame-ancestors 'none'",
+      "img-src 'self' data: blob:",
+      "object-src 'none'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline'",
+      "worker-src 'self' blob:",
+    ].join("; "),
   });
+  if (process.env.NODE_ENV === "production" && req.secure) {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
   next();
 });
 app.use(express.json({ limit: "8mb" }));
@@ -138,6 +156,9 @@ app.post("/api/metadata/arxiv", async (req, res) => {
 // ---------------------------------------------------------------------------
 app.post("/api/metadata/pdf", upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No PDF uploaded." });
+  if (req.file.buffer.subarray(0, 5).toString("ascii") !== "%PDF-") {
+    return res.status(415).json({ error: "The uploaded file is not a valid PDF." });
+  }
   try {
     const text = await extractPdfText(req.file.buffer);
     if (!text || text.trim().length < 40) {

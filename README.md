@@ -8,7 +8,7 @@ A research knowledge workspace that combines the three tools researchers juggle:
 
 The core loop is: import a paper, annotate its PDF (highlight plus attach notes), write linked block notes, and watch the knowledge graph and backlinks fill in.
 
-This is a real MVP of that core loop. The Feature status section below is explicit about what is fully working versus what is MVP level or a stub. Nothing here is claimed to work that does not.
+This is a usable local-first research workspace, not a demo shell. The Feature status section below is explicit about what is fully working versus what remains intentionally lightweight.
 
 ---
 
@@ -44,7 +44,9 @@ Then open http://localhost:3001.
 
 Production responses include baseline security headers, immutable caching for
 hashed assets, same-origin CORS by default, request-size validation, and
-per-instance rate limits on upstream and AI endpoints. When the UI is hosted on
+per-instance rate limits on upstream and AI endpoints. They also enforce a
+same-origin Content Security Policy, deny framing, isolate cross-origin resources,
+validate the PDF file signature, and enable HSTS behind production HTTPS. When the UI is hosted on
 a separate origin, set `CORS_ORIGIN` to that exact origin. For horizontally
 scaled production deployments, enforce a shared rate limit at the hosting edge
 as well.
@@ -73,6 +75,8 @@ docker run -p 3001:3001 -e ANTHROPIC_API_KEY=... lattice
 ### Fully working
 
 - **Paper library (Zotero side).** Import by DOI (CrossRef), arXiv id or URL (arXiv API), or PDF upload (server extracts text with unpdf and guesses metadata, resolving an embedded DOI through CrossRef when present). Collections, editable per-paper tags and collection membership, full text search over the library, and a library sidebar. Duplicate papers merge by DOI, arXiv id, or normalized title.
+- **Complete paper lifecycle.** Correct imported titles, authors, year, venue, DOI, URL, and abstract in place. A DOI/arXiv-only record can later receive a PDF, and an existing PDF can be replaced without recreating the paper or losing its notes and organization. Attaching remains useful while offline: the PDF is stored even if server-side text extraction is unavailable.
+- **Citation export.** Export the whole library or the currently filtered collection/tag/search result as a deduplicated BibTeX file.
 - **PDF storage split.** Uploaded PDF file bytes are stored as a blob in **IndexedDB**; all metadata, annotations, notes, and links go through a single repository abstraction backed by **localStorage**. Nothing is uploaded to the server for persistence.
 - **PDF annotation (the core).** A paper's PDF renders with pdf.js including the selectable text layer. Selecting text creates a highlight in one of five colors. Each highlight stores `{ paperId, page, rects, text, color, note }` with rects normalized as fractions of the page, so highlights **re-anchor at any zoom and persist across reloads**. A sidebar lists highlights; clicking one scrolls to it; clicking a highlight (or its list row) lets you add or edit a note and change its color.
 - **Linked notes (Obsidian plus Notion sides).** A block editor (see below) for standalone notes and per paper notes docs, with `[[wikilink]]` autocomplete that suggests papers and notes. Links are parsed and a **backlinks panel** shows what links to the current note. Each paper has a dedicated notes doc (the Notes button).

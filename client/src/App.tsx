@@ -10,6 +10,7 @@ import {
   workspaceBackupFilename,
 } from "./lib/workspaceBackup";
 import { fetchPendingClippings } from "./lib/clippings";
+import { bibliographyFilename, papersToBibTeX } from "./lib/citations";
 const AddPaper = lazy(() => import("./components/AddPaper"));
 const PaperView = lazy(() => import("./components/PaperView"));
 const NoteEditor = lazy(() => import("./components/NoteEditor"));
@@ -180,6 +181,20 @@ export default function App() {
     } catch (error) {
       setBackupStatus(error instanceof Error ? error.message : "Restore failed");
     }
+  }
+
+  function exportBibliography() {
+    const contents = papersToBibTeX(filteredPapers);
+    const url = URL.createObjectURL(new Blob([contents], { type: "application/x-bibtex" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = bibliographyFilename(
+      collectionFilter
+        ? collections.find((collection) => collection.id === collectionFilter)?.name || "collection"
+        : tagFilter || "library"
+    );
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
   }
 
   // ---- Render helpers ----
@@ -457,6 +472,7 @@ export default function App() {
             onOpen={(id) => setView({ kind: "paper", id })}
             onDelete={deletePaper}
             onAdd={() => setShowAdd(true)}
+            onExport={exportBibliography}
             heading={
               collectionFilter
                 ? collections.find((c) => c.id === collectionFilter)?.name || "Collection"
@@ -495,6 +511,7 @@ function Library({
   onOpen,
   onDelete,
   onAdd,
+  onExport,
   heading,
 }: {
   papers: Paper[];
@@ -504,12 +521,21 @@ function Library({
   onOpen: (id: string) => void;
   onDelete: (p: Paper) => void;
   onAdd: () => void;
+  onExport: () => void;
   heading: string;
 }) {
   return (
     <div className="flex flex-col h-full">
       <div className="px-6 py-3 border-b border-slate-800 flex items-center gap-3">
         <h1 className="text-lg font-semibold">{heading}</h1>
+        <button
+          onClick={onExport}
+          disabled={papers.length === 0}
+          className="text-xs bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded px-2.5 py-1.5"
+          title="Export the papers currently shown as BibTeX"
+        >
+          Export BibTeX
+        </button>
         <div className="ml-auto relative">
           <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500">
             <IconSearch />

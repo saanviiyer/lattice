@@ -6,8 +6,8 @@ import { useEffect, useState } from "react";
 import type { Collection, Highlight, HighlightColor, Paper } from "../types";
 import { HIGHLIGHT_COLORS } from "../types";
 import { repo } from "../lib/repository";
-import { getPdf } from "../lib/blobStore";
-import { explainHighlight, synthesizeNote } from "../lib/api";
+import { getPdf, putPdf } from "../lib/blobStore";
+import { explainHighlight, metadataFromPdf, synthesizeNote } from "../lib/api";
 import { annotatedPdfFilename, createAnnotatedPdf } from "../lib/annotatedPdf";
 import PdfReader from "./PdfReader";
 import { IconSparkle, IconTrash, IconNote, IconBack } from "./Icons";
@@ -52,6 +52,8 @@ export default function PaperView({
   const [exportBusy, setExportBusy] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [tagDraft, setTagDraft] = useState(paper.tags.join(", "));
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [detailsDraft, setDetailsDraft] = useState(() => metadataDraft(paper));
 
   function refreshHighlights() {
     setHighlights(repo.listHighlights(paper.id));
@@ -76,7 +78,65 @@ export default function PaperView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paper.id]);
 
-  useEffect(() => setTagDraft(paper.tags.join(", ")), [paper.id, paper.tags]);
+  useEffect(() => {
+    setTagDraft(paper.tags.join(", "));
+    setDetailsDraft(metadataDraft(paper));
+  }, [paper.id, paper.tags]);
+
+  function saveDetails() {
+    const title = detailsDraft.title.trim();
+    if (!title) {
+      setStatus("A paper title is required.");
+      return;
+    }
+    const parsedYear = detailsDraft.year.trim() ? Number(detailsDraft.year) : null;
+    if (parsedYear !== null && (!Number.isInteger(parsedYear) || parsedYear < 1000 || parsedYear > 9999)) {
+      setStatus("Year must be a four-digit number.");
+      return;
+    }
+    repo.updatePaper(paper.id, {
+      title,
+      authors: detailsDraft.authors.split("\n").map((author) => author.trim()).filter(Boolean),
+      year: parsedYear,
+      venue: detailsDraft.venue.trim(),
+      doi: detailsDraft.doi.trim(),
+      url: detailsDraft.url.trim(),
+      abstract: detailsDraft.abstract.trim(),
+    });
+    onPaperUpdated();
+    setStatus("Paper details saved.");
+  }
+
+  async function attachPdf(file: File) {
+    setPdfBusy(true);
+    setStatus(paper.hasPdf ? "Replacing PDF…" : "Attaching PDF…");
+    try {
+      const signature = new TextDecoder().decode(await file.slice(0, 5).arrayBuffer());
+      if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+        throw new Error("Choose a PDF file.");
+      }
+      if (signature !== "%PDF-") throw new Error("That file does not appear to be a valid PDF.");
+      await putPdf(paper.id, file);
+      let extractedText = "";
+      try {
+        const result = await metadataFromPdf(file);
+        extractedText = result.paper.pdfText || "";
+      } catch {
+        // The PDF remains usable even when text extraction is unavailable/offline.
+      }
+      repo.updatePaper(paper.id, { hasPdf: true, pdfText: extractedText || paper.pdfText });
+      setBlob(file);
+      setBlobState("ready");
+      onPaperUpdated();
+      setStatus(extractedText
+        ? "PDF attached and searchable text extracted."
+        : "PDF attached. Text extraction was unavailable; annotations still work.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not attach the PDF.");
+    } finally {
+      setPdfBusy(false);
+    }
+  }
 
   function saveTags() {
     const tags = tagDraft
@@ -206,6 +266,20 @@ export default function PaperView({
         >
           Organize
         </button>
+        <label className="text-sm bg-slate-800 hover:bg-slate-700 rounded-md px-3 py-1.5 cursor-pointer">
+          {pdfBusy ? "Attaching…" : paper.hasPdf ? "Replace PDF" : "Attach PDF"}
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            disabled={pdfBusy}
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void attachPdf(file);
+              event.target.value = "";
+            }}
+          />
+        </label>
         <button
           onClick={() => onOpenPaperNote(paper.id)}
           className="text-sm flex items-center gap-1 bg-slate-800 hover:bg-slate-700 rounded-md px-3 py-1.5"
@@ -225,7 +299,32 @@ export default function PaperView({
       </div>
 
       {showDetails && (
-        <div className="border-b border-slate-800 bg-slate-900/70 px-4 py-3 grid gap-4 lg:grid-cols-2">
+        <div className="border-b border-slate-800 bg-slate-900/70 px-4 py-3 space-y-4 max-h-[46vh] overflow-auto">
+          <div className="grid gap-3 lg:grid-cols-2">
+            <label className="text-xs text-slate-400">Title
+              <input value={detailsDraft.title} onChange={(event) => setDetailsDraft({ ...detailsDraft, title: event.target.value })} className="mt-1 block w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-indigo-500" />
+            </label>
+            <label className="text-xs text-slate-400">Authors <span className="text-slate-600">(one per line)</span>
+              <textarea value={detailsDraft.authors} onChange={(event) => setDetailsDraft({ ...detailsDraft, authors: event.target.value })} rows={2} className="mt-1 block w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-indigo-500 resize-y" />
+            </label>
+            <label className="text-xs text-slate-400">Year
+              <input inputMode="numeric" value={detailsDraft.year} onChange={(event) => setDetailsDraft({ ...detailsDraft, year: event.target.value })} className="mt-1 block w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-indigo-500" />
+            </label>
+            <label className="text-xs text-slate-400">Venue
+              <input value={detailsDraft.venue} onChange={(event) => setDetailsDraft({ ...detailsDraft, venue: event.target.value })} className="mt-1 block w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-indigo-500" />
+            </label>
+            <label className="text-xs text-slate-400">DOI
+              <input value={detailsDraft.doi} onChange={(event) => setDetailsDraft({ ...detailsDraft, doi: event.target.value })} className="mt-1 block w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-indigo-500" />
+            </label>
+            <label className="text-xs text-slate-400">URL
+              <input type="url" value={detailsDraft.url} onChange={(event) => setDetailsDraft({ ...detailsDraft, url: event.target.value })} className="mt-1 block w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-indigo-500" />
+            </label>
+          </div>
+          <label className="block text-xs text-slate-400">Abstract
+            <textarea value={detailsDraft.abstract} onChange={(event) => setDetailsDraft({ ...detailsDraft, abstract: event.target.value })} rows={3} className="mt-1 block w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-indigo-500 resize-y" />
+          </label>
+          <button onClick={saveDetails} className="text-sm bg-indigo-600 hover:bg-indigo-500 rounded px-3 py-1.5">Save details</button>
+          <div className="grid gap-4 lg:grid-cols-2">
           <label className="text-xs text-slate-400">
             Tags <span className="text-slate-600">(comma separated)</span>
             <input
@@ -261,6 +360,7 @@ export default function PaperView({
               )}
             </div>
           </fieldset>
+          </div>
         </div>
       )}
 
@@ -432,4 +532,16 @@ export default function PaperView({
       </div>
     </div>
   );
+}
+
+function metadataDraft(paper: Paper) {
+  return {
+    title: paper.title,
+    authors: paper.authors.join("\n"),
+    year: paper.year?.toString() || "",
+    venue: paper.venue,
+    doi: paper.doi,
+    url: paper.url || "",
+    abstract: paper.abstract,
+  };
 }
