@@ -9,12 +9,15 @@ import {
   restoreWorkspaceBackup,
   workspaceBackupFilename,
 } from "./lib/workspaceBackup";
+import { fetchPendingClippings } from "./lib/clippings";
 const AddPaper = lazy(() => import("./components/AddPaper"));
 const PaperView = lazy(() => import("./components/PaperView"));
 const NoteEditor = lazy(() => import("./components/NoteEditor"));
 const GraphView = lazy(() => import("./components/GraphView"));
+const Inbox = lazy(() => import("./components/Inbox"));
 import {
   IconGraph,
+  IconInbox,
   IconLibrary,
   IconNote,
   IconPlus,
@@ -26,7 +29,8 @@ type View =
   | { kind: "library" }
   | { kind: "paper"; id: string }
   | { kind: "note"; id: string }
-  | { kind: "graph" };
+  | { kind: "graph" }
+  | { kind: "inbox" };
 
 export default function App() {
   const [, setTick] = useState(0);
@@ -41,12 +45,25 @@ export default function App() {
     null
   );
   const [backupStatus, setBackupStatus] = useState("");
+  const [inboxCount, setInboxCount] = useState(0);
 
   useEffect(() => {
     getHealth()
       .then((h) => setHealth({ mockMode: h.mockMode, model: h.model }))
       .catch(() => setHealth(null));
   }, []);
+
+  // Poll the web-clipping queue so the sidebar badge reflects pending imports.
+  const refreshInboxCount = useCallback(() => {
+    fetchPendingClippings()
+      .then((items) => setInboxCount(items.length))
+      .catch(() => setInboxCount(0));
+  }, []);
+  useEffect(() => {
+    refreshInboxCount();
+    const timer = window.setInterval(refreshInboxCount, 30_000);
+    return () => window.clearInterval(timer);
+  }, [refreshInboxCount]);
 
   // Read current state from the repository on every render (cheap; localStorage).
   const papers = repo.listPapers();
@@ -211,7 +228,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="px-3">
+        <div className="px-3 space-y-0.5">
           <button
             onClick={() => {
               setView({ kind: "library" });
@@ -226,6 +243,22 @@ export default function App() {
           >
             <IconLibrary /> All papers
             <span className="ml-auto text-xs text-slate-500">{papers.length}</span>
+          </button>
+          <button
+            onClick={() => {
+              setView({ kind: "inbox" });
+              refreshInboxCount();
+            }}
+            className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
+              view.kind === "inbox" ? "bg-slate-800" : "hover:bg-slate-800/60"
+            }`}
+          >
+            <IconInbox /> Web clippings
+            {inboxCount > 0 && (
+              <span className="ml-auto text-[11px] bg-indigo-600 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+                {inboxCount}
+              </span>
+            )}
           </button>
         </div>
 
@@ -387,6 +420,14 @@ export default function App() {
               repo.deleteNote(activeNote.id);
               refresh();
               setView({ kind: "library" });
+            }}
+          />
+        ) : view.kind === "inbox" ? (
+          <Inbox
+            collections={collections}
+            onImported={() => {
+              refresh();
+              refreshInboxCount();
             }}
           />
         ) : view.kind === "graph" ? (

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Save to lattice</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <div class="pop">
+      <div class="head">
+        <span class="brand">▚ lattice</span>
+        <a id="options" href="#" class="settings-link">Settings</a>
+      </div>
+
+      <label class="field">
+        <span>Title</span>
+        <input id="title" type="text" placeholder="Page title" />
+      </label>
+
+      <label class="field">
+        <span>URL</span>
+        <input id="url" type="text" placeholder="https://…" readonly />
+      </label>
+
+      <label class="field">
+        <span>Excerpt</span>
+        <textarea id="excerpt" rows="3" placeholder="Selected text or page summary"></textarea>
+      </label>
+
+      <label class="field">
+        <span>Collection</span>
+        <input id="collection" type="text" placeholder="Folder name (optional)" />
+        <small>Leave blank to file it from the app's Inbox later.</small>
+      </label>
+
+      <label class="field">
+        <span>Note</span>
+        <textarea id="note" rows="2" placeholder="Why you saved this (optional)"></textarea>
+      </label>
+
+      <div class="actions">
+        <button id="save" type="button">Save to lattice</button>
+      </div>
+
+      <div id="status" class="status"></div>
+
+      <div id="queue-row" class="queue-row" hidden>
+        <span id="queue-info"></span>
+        <button id="sync" type="button">Sync now</button>
+      </div>
+    </div>
+    <script src="./popup.js"></script>
+  </body>
+</html>

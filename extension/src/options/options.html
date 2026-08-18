@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lattice clipper settings</title>
+    <link rel="stylesheet" href="./options.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <h1><span class="brand">▚ lattice</span> clipper settings</h1>
+
+      <label class="field">
+        <span>lattice server URL</span>
+        <input id="baseUrl" type="text" placeholder="http://localhost:3001" />
+        <small>Where clippings are sent. The local dev server is http://localhost:3001.</small>
+      </label>
+
+      <label class="field">
+        <span>Default collection</span>
+        <input id="defaultCollection" type="text" placeholder="e.g. Reading list" />
+        <small>Pre-filled in the popup and used by the right-click quick-save. Leave blank to decide on import.</small>
+      </label>
+
+      <div class="actions">
+        <button id="save" type="button">Save</button>
+        <span id="status" class="status"></span>
+      </div>
+
+      <p class="note">
+        Saved articles land in the lattice app's Inbox, where you import each one
+        into a collection. If the server is unreachable, clippings are queued in
+        this browser and synced automatically once it is back.
+      </p>
+    </main>
+    <script src="./options.js"></script>
+  </body>
+</html>

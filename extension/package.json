@@ -1,0 +1,19 @@
+{
+  "name": "lattice-clipper",
+  "version": "0.1.0",
+  "description": "Chrome MV3 article clipper that saves any web page to a lattice collection with an optional note, queued offline and imported from the app's Inbox.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "node build.mjs",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "@types/node": "^22.10.2",
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

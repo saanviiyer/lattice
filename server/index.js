@@ -15,6 +15,12 @@ import {
   MAX_UPLOAD_BYTES,
 } from "./parse.js";
 import { explainHighlight, synthesizeNote, MOCK_MODE, MODEL } from "./ai.js";
+import {
+  addClipping,
+  listClippings,
+  markImported,
+  deleteClipping,
+} from "./clippings.js";
 
 dotenv.config();
 
@@ -219,6 +225,67 @@ app.post("/api/ai/synthesize", async (req, res) => {
   } catch (err) {
     console.error("synthesize error:", err.message);
     res.status(500).json({ error: err.message || "Synthesize failed." });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Web clippings (browser extension -> app Inbox).
+//
+// The extension posts from a chrome-extension:// origin, so these routes carry
+// their own permissive CORS regardless of the global CORS toggle. They only
+// move small clipping records, never credentials or file bytes.
+// ---------------------------------------------------------------------------
+const clippingsCors = cors({ origin: true, methods: ["GET", "POST", "OPTIONS"] });
+app.use("/api/clippings", clippingsCors);
+app.options("/api/clippings", clippingsCors);
+app.options("/api/clippings/:id/imported", clippingsCors);
+
+// Save a clipping from the extension.
+app.post("/api/clippings", async (req, res) => {
+  try {
+    const clipping = await addClipping(req.body || {});
+    if (!clipping) return res.status(400).json({ error: "A clipping needs at least a URL." });
+    res.status(201).json({ clipping });
+  } catch (err) {
+    console.error("clipping save error:", err.message);
+    res.status(500).json({ error: "Could not save the clipping." });
+  }
+});
+
+// List clippings. `?pending=1` returns only those not yet imported.
+app.get("/api/clippings", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const pendingOnly = req.query.pending === "1" || req.query.pending === "true";
+    const clippings = await listClippings({ pendingOnly });
+    res.json({ clippings });
+  } catch (err) {
+    console.error("clipping list error:", err.message);
+    res.status(500).json({ error: "Could not list clippings." });
+  }
+});
+
+// Ack a clipping once the app has imported it into a collection.
+app.post("/api/clippings/:id/imported", async (req, res) => {
+  try {
+    const clipping = await markImported(req.params.id);
+    if (!clipping) return res.status(404).json({ error: "Clipping not found." });
+    res.json({ clipping });
+  } catch (err) {
+    console.error("clipping ack error:", err.message);
+    res.status(500).json({ error: "Could not update the clipping." });
+  }
+});
+
+// Remove a clipping outright (a hard clear).
+app.delete("/api/clippings/:id", async (req, res) => {
+  try {
+    const removed = await deleteClipping(req.params.id);
+    if (!removed) return res.status(404).json({ error: "Clipping not found." });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("clipping delete error:", err.message);
+    res.status(500).json({ error: "Could not delete the clipping." });
   }
 });
 

@@ -11,3 +11,5 @@ build/
 *.tsbuildinfo
 .cache/
 server/.cache/
+# Runtime-generated web-clipping queue
+server/data/

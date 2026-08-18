@@ -105,6 +105,68 @@ The highlight **data model** and its re-anchoring math are covered by unit tests
 
 ---
 
+## Web clipper (Chrome extension)
+
+A Zotero-style article clipper lives in `extension/`. When you find an article
+you like on the web, save it to a lattice collection with an optional note; it
+lands in the app's **Web clippings** Inbox, where you file it into a collection
+as a reference.
+
+### Build and load
+
+```bash
+cd extension
+npm install
+npm run build     # type-checks, bundles with esbuild, writes extension/dist
+```
+
+Then in Chrome: open `chrome://extensions`, turn on Developer mode, click
+**Load unpacked**, and select `extension/dist`.
+
+### Point it at your lattice server
+
+Open the extension's **Settings** (options page) and set the lattice server URL.
+It defaults to the local dev server, `http://localhost:3001`. You can also set a
+default collection name that pre-fills the popup and the right-click quick-save.
+
+### Save an article
+
+- Click the toolbar icon to open the popup: it auto-captures the page title,
+  URL, any selected text (or the page description / first paragraph as a
+  fallback), and lets you choose a collection and add a note, then **Save to
+  lattice**.
+- Or right-click a page or selection and choose **Save to lattice** for a quick
+  save into your default collection.
+
+If the lattice server is unreachable, the clipping is queued in
+`chrome.storage.local` and synced automatically the next time the server is
+reachable (the popup shows how many are waiting, with a **Sync now** button).
+
+### File it in the app
+
+Open lattice and click **Web clippings** in the sidebar (a badge shows how many
+are waiting). Each clipping shows its title, URL, excerpt, and note; pick or type
+a collection and click **Import**. The clipping becomes a paper reference
+(title + URL, excerpt as the abstract) with the note attached as its notes doc,
+the target collection is created if it does not exist, and the clipping is acked
+so it leaves the queue.
+
+The clipping queue is file-backed on the server at `server/data/clippings.json`
+(gitignored). The extension talks to three routes: `POST /api/clippings`,
+`GET /api/clippings` (add `?pending=1` for un-imported only), and
+`POST /api/clippings/:id/imported` to ack (plus `DELETE /api/clippings/:id` to
+dismiss). Those routes carry permissive CORS so the extension can post from its
+own origin.
+
+**Honest note on verification.** The extension build, the lattice build, and the
+unit tests (payload construction/validation, the offline-queue logic, and the
+clipping to paper/collection mapping) all pass, and the server + Inbox import
+path is verified end to end via the API and in the app UI. Actually saving from a
+real article requires loading the unpacked extension in a live Chrome session; a
+headless run cannot exercise the in-browser capture and context menu.
+
+---
+
 ## How the pieces fit
 
 ```
@@ -125,8 +187,17 @@ client/
       GraphView.tsx      d3-force canvas graph
       AddPaper.tsx       DOI / arXiv / PDF import
 server/
-  index.js   Express: /api metadata (DOI, arXiv, PDF), AI (explain, synthesize), health; serves client/dist in production
+  index.js   Express: /api metadata (DOI, arXiv, PDF), AI (explain, synthesize), clippings, health; serves client/dist in production
   crossref.js, arxiv.js, parse.js, http.js, ai.js
+  clippings.js   file-backed web-clipping queue (server/data/clippings.json)
+extension/
+  src/
+    background/service-worker.ts   context menu, save flow, offline-queue sync
+    popup/                         capture the page, pick a collection, add a note
+    options/                       lattice server URL + default collection
+    lib/clipping.ts                pure payload build/validate + queue logic (unit tested)
+    lib/capture.ts                 injected page-capture (title, URL, selection, description)
+  build.mjs                        esbuild MV3 build -> extension/dist (Load unpacked)
 ```
 
 Editor and graph libraries chosen: **pdf.js (`pdfjs-dist`)** for PDF rendering with a text layer, **d3-force** for the graph, and a **custom lightweight block model** for the Notion style editor (Markdown backed).
