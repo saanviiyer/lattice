@@ -5,8 +5,8 @@ the papers you have actually read and the notes you have actually written.
 
 Ask *"using my lattice project Replay, what is the weakest link in this argument?"*
 and Claude pulls the premise, the open questions, each paper with your own takeaway,
-your notes, and what the project is still missing — instead of recalling the
-literature from training data.
+your notes, and what the project is still missing. Claude does not have to recall
+the literature from training data.
 
 ## How it works
 
@@ -17,8 +17,8 @@ every change:
 ~/Library/Application Support/lattice/workspace/workspace.json
 ```
 
-This server reads that file. No sync service, no API key, no account — the library
-is already on disk in a documented shape. The file is re-read whenever its
+This server reads that file. It needs no sync service and no API key, because the
+library is already on disk in a documented shape. The file is re-read whenever its
 modification time moves, so edits you make in the app show up mid-conversation.
 
 **It only reads.** There is no tool here that writes to your library.
@@ -84,14 +84,14 @@ itself):
 | --- | --- |
 | `list_projects` | The project tree, each with its premise, status, and how much is filed under it. Start here when a project is named. |
 | `get_project` | One project in full: premise, questions with their evidence, papers with your takeaways, your notes, subprojects, and what it is still missing. |
-| `search_library` | Papers, your notes, and your PDF highlights. Takes lattice's own filters — `author:`, `tag:`, `year:`, `status:`, `has:pdf`, `is:favorite`, `color:`. |
+| `search_library` | Papers, your notes, and your PDF highlights. Takes lattice's own filters (`author:`, `tag:`, `year:`, `status:`, `has:pdf`, `is:favorite`, `color:`). |
 | `get_paper` | One paper: metadata, abstract, your takeaway, its projects, and every passage you highlighted with your notes on it. |
 | `get_note` | One note in full, with the projects it belongs to. |
 | `list_questions` | Open research questions across the library, flagging the ones with no evidence attached. |
 | `get_plan` | A project's proposal and agent plan: question, hypothesis, what would support or count against it, and each task with its role, inputs, tools, hand-back, done-when check and review stops. With `task`, one task's brief. With no arguments, the list of proposals. |
 
 Papers are always identified by their citation key, so anything Claude drafts can be
-traced back to a record in your library rather than to a title it may have invented.
+traced back to a record in your library. A title that Claude invents has no key to match.
 
 ## Tests
 
