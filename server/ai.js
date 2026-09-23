@@ -1,9 +1,10 @@
 // AI actions for lattice. Uses the Anthropic SDK when ANTHROPIC_API_KEY is set;
 // otherwise returns realistic MOCK results so the whole app is usable with zero setup.
 //
-// Two actions:
+// Three actions:
 //   explainHighlight(text, context) -> { explanation }
 //   synthesizeNote(paperTitle, highlights) -> { note }  (markdown, with [[wikilink]])
+//   askLibrary(question, sources) -> { answer, sourceIds }
 import Anthropic from "@anthropic-ai/sdk";
 
 const API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -23,8 +24,13 @@ the researcher's own emphasis, and stay grounded in the highlighted text (do not
 Begin the note with a link to the paper using lattice wikilink syntax: [[Paper Title]]. Use short Markdown
 sections and bullet points. Do not fabricate quotes.`;
 
+const ASK_SYSTEM = `You are lattice, a careful research companion. Answer the researcher's question only from
+the library sources provided. Synthesize agreements, tensions, and gaps when the evidence allows it. Cite
+sources inline as [1], [2], and so on. If the library cannot answer the question, say what is missing and
+suggest a concrete next search. Never invent papers, findings, citations, or numbers. Keep the answer concise.`;
+
 // ---------------------------------------------------------------------------
-// MOCK MODE builders — believable, grounded-looking output from the real inputs.
+// MOCK MODE builders: believable, grounded-looking output from the real inputs.
 // ---------------------------------------------------------------------------
 function mockExplain(text, context) {
   const snippet = (text || "").replace(/\s+/g, " ").trim();
@@ -66,6 +72,31 @@ function mockSynthesize(paperTitle, highlights) {
       `synthesis from ${MODEL}._`
   );
   return lines.join("\n");
+}
+
+export function mockAsk(question, sources) {
+  const terms = new Set((question.toLowerCase().match(/[a-z]{4,}/g) || []));
+  const ranked = sources
+    .map((source) => {
+      const text = `${source.title} ${source.abstract} ${source.takeaway}`.toLowerCase();
+      const score = [...terms].filter((term) => text.includes(term)).length;
+      return { ...source, score };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4);
+  if (!ranked.length) {
+    return { mockMode: true, answer: "Your library does not contain enough material to answer this yet. Add a relevant paper or broaden the question.", sourceIds: [] };
+  }
+  const evidence = ranked.map((source, index) => {
+    const claim = (source.takeaway || source.abstract || "No abstract or takeaway has been captured yet.")
+      .replace(/\s+/g, " ").trim().slice(0, 220);
+    return `- [${index + 1}] **${source.title}**: ${claim}`;
+  }).join("\n");
+  return {
+    mockMode: true,
+    answer: `Here is the strongest evidence currently in your library for **${question.trim()}**:\n\n${evidence}\n\n**Working conclusion.** These sources are the best starting set, but a grounded cross-paper conclusion needs richer takeaways or a live AI key. Treat this as a retrieval map, not a final claim.`,
+    sourceIds: ranked.map((source) => source.id),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -136,4 +167,26 @@ export async function synthesizeNote(paperTitle, highlights) {
     .join("")
     .trim();
   return { mockMode: false, note };
+}
+
+export async function askLibrary(question, sources) {
+  if (!question || !question.trim()) throw new Error("Ask a research question first.");
+  if (!Array.isArray(sources) || sources.length === 0) {
+    throw new Error("Add at least one paper before asking your library.");
+  }
+  if (MOCK_MODE) return mockAsk(question, sources);
+  const corpus = sources.map((source, index) =>
+    `[${index + 1}] ID: ${source.id}\nTitle: ${source.title}\nAuthors: ${(source.authors || []).join(", ")}\nYear: ${source.year || "unknown"}\nAbstract: ${source.abstract || "not available"}\nResearcher takeaway: ${source.takeaway || "not captured"}`
+  ).join("\n\n");
+  const message = await client.messages.create({
+    model: MODEL,
+    max_tokens: 1800,
+    system: ASK_SYSTEM,
+    thinking: { type: "disabled" },
+    messages: [{ role: "user", content: `Question: ${question}\n\nLibrary sources:\n${corpus}` }],
+  });
+  const answer = message.content.filter((block) => block.type === "text").map((block) => block.text).join("").trim();
+  const cited = new Set([...answer.matchAll(/\[(\d+)\]/g)].map((match) => Number(match[1]) - 1));
+  const sourceIds = [...cited].map((index) => sources[index]?.id).filter(Boolean);
+  return { mockMode: false, answer, sourceIds };
 }

@@ -1,0 +1,666 @@
+<title>lattice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;450;500;600&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,300&display=swap">
+
+<style>
+  /* ---- Tokens. Light is the base; both dark states redefine only these. ---- */
+  :root {
+    color-scheme: light;
+    --scheme: light;
+    --ground: #f4f7f9;
+    --surface: #ffffff;
+    --surface-sunk: #eaf0f4;
+    --ink: #0f1720;
+    --ink-soft: #4a5866;
+    --ink-faint: #657483;
+    --rule: #d9e2e8;
+    --rule-strong: #bdcad3;
+    /* Cyan has to come down a long way to hold contrast on a light ground:
+       #22d3ee on white is about 1.7:1 and unreadable. This is the same hue at a
+       lightness that passes for both body text and a filled button. */
+    --accent: #0e7490;
+    --accent-hover: #0b5f76;
+    --accent-ink: #ffffff;
+    --accent-wash: rgba(14, 116, 144, 0.08);
+    --good: #0f766e;
+    --shadow: 0 1px 2px rgba(15, 23, 32, .05), 0 12px 32px rgba(15, 23, 32, .07);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --scheme: dark;
+      /* The app's own ground, panel and cyan, so the site and the product read as
+         one thing. */
+      --ground: #0b0f17;
+      --surface: #0d131d;
+      --surface-sunk: #080c13;
+      --ink: #e2e8f0;
+      --ink-soft: #94a3b8;
+      --ink-faint: #7a8798;
+      --rule: #1b2431;
+      --rule-strong: #2c3849;
+      --accent: #22d3ee;
+      --accent-hover: #67e8f9;
+      --accent-ink: #071018;
+      --accent-wash: rgba(34, 211, 238, 0.10);
+      --good: #2dd4bf;
+      --shadow: 0 1px 2px rgba(0,0,0,.45), 0 14px 36px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --scheme: dark;
+    /* The app's own ground, panel and cyan, so the site and the product read as
+       one thing. */
+    --ground: #0b0f17;
+    --surface: #0d131d;
+    --surface-sunk: #080c13;
+    --ink: #e2e8f0;
+    --ink-soft: #94a3b8;
+    --ink-faint: #7a8798;
+    --rule: #1b2431;
+    --rule-strong: #2c3849;
+    --accent: #22d3ee;
+    --accent-hover: #67e8f9;
+    --accent-ink: #071018;
+    --accent-wash: rgba(34, 211, 238, 0.10);
+    --good: #2dd4bf;
+    --shadow: 0 1px 2px rgba(0,0,0,.45), 0 14px 36px rgba(0,0,0,.4);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16.5px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1140px; margin: 0 auto; padding: 0 28px; }
+
+  /* ---- The lattice: hairline rules the page is built on. ---- */
+  .band { border-top: 1px solid var(--rule); }
+  h1, h2, h3 {
+    font-family: Newsreader, ui-serif, Georgia, serif;
+    font-weight: 400;
+    text-wrap: balance;
+    margin: 0;
+    letter-spacing: -0.012em;
+  }
+  h1 { font-size: clamp(2rem, 3.7vw, 2.95rem); line-height: 1.12; max-width: 19ch; }
+  h2 { font-size: clamp(1.75rem, 3.2vw, 2.5rem); line-height: 1.14; }
+  h3 { font-size: 1.16rem; line-height: 1.3; }
+  p { margin: 0; }
+  .lede { font-size: 1.1rem; color: var(--ink-soft); max-width: 60ch; }
+  code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .9em; color: var(--ink); }
+  .prose { color: var(--ink-soft); max-width: 64ch; }
+  em.i { font-style: italic; font-family: Newsreader, ui-serif, Georgia, serif; }
+
+  a { color: inherit; }
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  /* ---- Header ---- */
+  header.top {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--ground);
+    background: color-mix(in srgb, var(--ground) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--rule);
+  }
+  .top-in { display: flex; align-items: center; gap: 14px; height: 62px; }
+  .mark { display: flex; align-items: center; gap: 9px; text-decoration: none; }
+  .mark svg { width: 25px; height: 25px; color: var(--accent); display: block; }
+  .mark b {
+    font-family: Newsreader, ui-serif, Georgia, serif;
+    font-weight: 500; font-size: 1.3rem; letter-spacing: -.02em;
+  }
+  .top nav { margin-left: auto; display: flex; align-items: center; gap: 26px; }
+  .top nav a { color: var(--ink-soft); text-decoration: none; font-size: .93rem; }
+  .top nav a:hover { color: var(--ink); }
+  .themebtn {
+    display: grid; place-items: center;
+    width: 32px; height: 32px; padding: 0;
+    border: 1px solid var(--rule-strong); border-radius: 3px;
+    background: transparent; color: var(--ink-soft); cursor: pointer;
+  }
+  .themebtn:hover { color: var(--accent); border-color: var(--accent); }
+  /* Each theme shows the icon for the state the button would switch you to. */
+  .themebtn .moon { display: none; }
+  :root[data-theme="dark"] .themebtn .sun-core,
+  :root[data-theme="dark"] .themebtn .sun-rays { display: none; }
+  :root[data-theme="dark"] .themebtn .moon { display: block; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .themebtn .sun-core,
+    :root:not([data-theme="light"]) .themebtn .sun-rays { display: none; }
+    :root:not([data-theme="light"]) .themebtn .moon { display: block; }
+  }
+  :root[data-theme="light"] .themebtn .sun-core,
+  :root[data-theme="light"] .themebtn .sun-rays { display: block; }
+  :root[data-theme="light"] .themebtn .moon { display: none; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--accent); color: var(--accent-ink);
+    border: 1px solid var(--accent);
+    padding: 10px 17px; border-radius: 3px;
+    font: 500 .93rem/1 "IBM Plex Sans", sans-serif;
+    text-decoration: none; cursor: pointer;
+  }
+  .btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn.ghost { background: transparent; color: var(--ink); border-color: var(--rule-strong); }
+  .btn.ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ---- Hero ---- */
+  .hero { padding: 66px 0 0; }
+  .hero-grid { display: grid; grid-template-columns: 1.02fr .98fr; gap: 52px; align-items: center; }
+  .hero h1 em { font-style: italic; color: var(--accent); }
+  .hero .lede { margin-top: 22px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 11px; margin-top: 30px; align-items: center; }
+  .cta small { color: var(--ink-faint); font-size: .84rem; }
+
+  .stage {
+    position: relative;
+    aspect-ratio: 1 / .88;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    border-radius: 3px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .stage canvas { display: block; width: 100%; height: 100%; }
+  .stage figcaption {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 9px 13px;
+    border-top: 1px solid var(--rule);
+    background: var(--surface);
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    color: var(--ink-faint); letter-spacing: .04em;
+    display: flex; justify-content: space-between; gap: 10px;
+  }
+  .stage button.replay {
+    position: absolute; top: 10px; right: 10px;
+    border: 1px solid var(--rule); background: var(--surface);
+    color: var(--ink-soft); border-radius: 3px; cursor: pointer;
+    font: 400 11px/1 "IBM Plex Mono", monospace; padding: 6px 9px;
+  }
+  .stage button.replay:hover { color: var(--ink); border-color: var(--rule-strong); }
+
+  /* ---- Sections ---- */
+  section { padding: 74px 0; }
+
+  /* ---- Feature rows ---- */
+  .feature { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; padding: 46px 0; border-top: 1px solid var(--rule); }
+  .feature:first-of-type { border-top: 0; }
+  .feature.flip .fig { order: -1; }
+  .feature h2 { margin-bottom: 14px; font-size: clamp(1.5rem, 2.6vw, 2rem); }
+  .feature p + p { margin-top: 12px; }
+
+  .plain { margin-top: 18px; display: grid; gap: 14px; }
+
+  /* ---- Recreated product surfaces ---- */
+  .panel {
+    border: 1px solid var(--rule); background: var(--surface);
+    border-radius: 3px; box-shadow: var(--shadow); overflow: hidden;
+  }
+  .panel-body { padding: 15px 16px; }
+
+  .row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--rule); font-size: .9rem; }
+  .row:last-child { border-bottom: 0; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .num { font-family: "IBM Plex Mono", monospace; font-size: .8rem; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+
+  .needs li { margin-bottom: 13px; display: flex; gap: 11px; align-items: flex-start; }
+  .needs { list-style: none; margin: 0; padding: 0; }
+  .needs .n {
+    flex: none; width: 19px; height: 19px; border-radius: 50%;
+    border: 1px solid var(--rule-strong); color: var(--ink-faint);
+    display: grid; place-items: center;
+    font-family: "IBM Plex Mono", monospace; font-size: 10px;
+  }
+  .needs strong { font-weight: 500; font-size: .92rem; display: block; }
+  .needs span { font-size: .82rem; color: var(--ink-soft); line-height: 1.45; }
+
+  pre {
+    margin: 0; padding: 15px 16px; overflow-x: auto;
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; line-height: 1.62;
+    color: var(--ink-soft); background: var(--surface-sunk);
+  }
+  pre .h { color: var(--ink); font-weight: 500; }
+  pre .k { color: var(--accent); }
+  pre .c { color: var(--ink-faint); }
+
+  /* ---- Steps ---- */
+  .steps { counter-reset: s; display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+  .steps > div { background: var(--surface); padding: 22px 24px; display: grid; grid-template-columns: 34px 1fr; gap: 16px; align-items: baseline; }
+  .steps .sn { font-family: "IBM Plex Mono", monospace; font-size: .8rem; color: var(--accent); }
+  .steps h3 { font-size: 1.06rem; margin-bottom: 5px; }
+  .steps p { font-size: .93rem; color: var(--ink-soft); }
+
+  /* ---- Footer ---- */
+  footer { border-top: 1px solid var(--rule); padding: 44px 0 60px; }
+  .foot { display: flex; flex-wrap: wrap; gap: 20px; align-items: baseline; }
+  .foot p { font-size: .88rem; color: var(--ink-faint); }
+  .foot nav { margin-left: auto; display: flex; gap: 22px; }
+  .foot nav a { font-size: .88rem; color: var(--ink-soft); text-decoration: none; }
+  .foot nav a:hover { color: var(--ink); }
+
+
+  @media (max-width: 900px) {
+    .hero-grid, .feature { grid-template-columns: 1fr; gap: 30px; }
+    .feature.flip .fig { order: 0; }
+    section { padding: 54px 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+  }
+</style>
+
+<header class="top">
+  <div class="wrap top-in">
+    <a class="mark" href="#top">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <g stroke="currentColor" fill="none" stroke-linecap="round">
+          <g stroke-opacity=".5" stroke-width="1.05">
+            <path d="M13.1 4.7 5.6 8"/><path d="M5.6 8 6.9 15.9"/><path d="M6.9 15.9 11 19.2"/>
+            <path d="M11 19.2 18.6 15.4"/><path d="M18.6 15.4 17.1 8.6"/><path d="M17.1 8.6 13.1 4.7"/>
+          </g>
+          <g stroke-opacity=".85" stroke-width="1.2"><path d="M5.6 8 18.6 15.4"/></g>
+        </g>
+        <g fill="currentColor">
+          <circle cx="13.1" cy="4.7" r="1.1"/><circle cx="5.6" cy="8" r="1.9"/>
+          <circle cx="6.9" cy="15.9" r="1.3"/><circle cx="11" cy="19.2" r="1.05"/>
+          <circle cx="18.6" cy="15.4" r="1.7"/><circle cx="17.1" cy="8.6" r="1.25"/>
+        </g>
+      </svg>
+      <b>lattice</b>
+    </a>
+    <nav>
+      <a href="#export">Exports</a>
+      <a href="#start">Get it</a>
+      <button id="theme" class="themebtn" type="button" aria-label="Switch between light and dark">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2" class="sun-core"/>
+          <g class="sun-rays"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></g>
+          <path class="moon" d="M20 13.5A8 8 0 0 1 10.5 4a8 8 0 1 0 9.5 9.5Z"/>
+        </svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <div class="wrap hero">
+    <div class="hero-grid">
+      <div>
+        <h1>A reference manager that files your library by field and exports it for an LLM.</h1>
+        <p class="lede">
+          Import a <code>.bib</code>. One button groups the unfiled papers into collections
+          named after research fields. Each collection lists what it is still missing.
+          Export any set of them as chat context or a <code>CLAUDE.md</code>.
+        </p>
+        <p class="lede" style="margin-top:14px">
+          Local-first and open source. Grouping, naming and suggestions are computed
+          from your own records, so it runs with no API key.
+        </p>
+        <div class="cta">
+          <a class="btn" href="#start">Download for macOS</a>
+          <a class="btn ghost" href="#start">Source</a>
+        </div>
+      </div>
+
+      <figure class="stage" style="margin:0">
+        <canvas id="lat" aria-label="Scattered papers gathering into six labelled research fields"></canvas>
+        <button class="replay" id="replay" type="button">replay</button>
+        <figcaption><span>495 papers, unfiled</span><span id="capstate">grouping…</span></figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <div class="band"><div class="wrap"><section>
+    <div class="feature">
+      <div>
+        <h2>Grouping 495 unfiled papers takes about a second</h2>
+        <p class="prose">
+          It reads titles, tags and abstracts, and names each collection after a research
+          field rather than the two words the papers happen to share.
+        </p>
+        <p class="prose">
+          Where several clusters land on the same field, each keeps the field name and
+          adds what separates it. Papers with too little in common are left unfiled
+          rather than pushed into the nearest collection.
+        </p>
+      </div>
+      <div class="fig">
+        <div class="panel">
+          <div class="panel-body">
+            <div class="row"><span class="dot" style="background:#0891b2"></span><span class="name">Protein structure prediction · protein folding</span><span class="num">13</span></div>
+            <div class="row"><span class="dot" style="background:#2563eb"></span><span class="name">Directed evolution · fitness landscape</span><span class="num">9</span></div>
+            <div class="row"><span class="dot" style="background:#059669"></span><span class="name">Antibody engineering</span><span class="num">13</span></div>
+            <div class="row"><span class="dot" style="background:#7c3aed"></span><span class="name">Molecular docking and binding · protein ligand</span><span class="num">7</span></div>
+            <div class="row"><span class="dot" style="background:#d97706"></span><span class="name">Reinforcement learning</span><span class="num">8</span></div>
+            <div class="row"><span class="dot" style="background:#db2777"></span><span class="name">Cryo-EM and imaging</span><span class="num">4</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature flip">
+      <div>
+        <h2>Each project lists what it is still missing</h2>
+        <p class="prose">
+          A project holds its papers, notes and open questions, and opens on a claim you
+          could turn out to be wrong about. The list underneath is ranked: a premise
+          before questions, questions before evidence.
+        </p>
+      </div>
+      <div class="fig">
+        <div class="panel">
+          <div class="panel-body">
+            <ul class="needs">
+              <li><span class="n">1</span><span><strong>Ask the first question</strong><span>A project with no question is a topic.</span></span></li>
+              <li><span class="n">2</span><span><strong>Write a takeaway for 6 papers</strong><span>Opened, never summarised.</span></span></li>
+              <li><span class="n">3</span><span><strong>Attach evidence to 2 questions</strong><span>Nothing here bears on them yet.</span></span></li>
+              <li><span class="n">4</span><span><strong>Place 3 papers in the argument</strong><span>No note or question refers to them.</span></span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature">
+      <div>
+        <h2>Suggested projects carry the counts they came from</h2>
+        <p class="prose">
+          Two kinds: a method you have read applied to a domain you have read and never
+          combined, and a question you gathered evidence for but never filed. Both are
+          counted from the library rather than written by a model, so you can check one
+          and disagree with it.
+        </p>
+      </div>
+      <div class="fig">
+        <div class="panel">
+          <div class="panel-body">
+            <div style="padding-bottom:13px;border-bottom:1px solid var(--rule)">
+              <strong style="font-weight:500;font-size:.97rem">Active learning for antibody engineering</strong>
+              <p style="font-size:.85rem;color:var(--ink-soft);margin-top:6px">14 papers on active learning and 11 on antibody engineering, and only 1 that does both.</p>
+            </div>
+            <div style="padding-top:13px">
+              <strong style="font-weight:500;font-size:.97rem">Does replay cause consolidation?</strong>
+              <p style="font-size:.85rem;color:var(--ink-soft);margin-top:6px">5 papers already attached to this question, and it is not in a project yet.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section></div></div>
+
+  <div class="band"><div class="wrap"><section>
+    <h2>No model is called to organise your library</h2>
+    <div class="plain">
+      <p class="prose">
+        Grouping, naming, gap-finding and the suggestions are all computed from your
+        records. Nothing about your literature is asserted that you cannot check in
+        your own library.
+      </p>
+      <p class="prose">
+        Exports carry citation keys tied to papers you hold and instruct the assistant
+        never to invent one. A question with no evidence attached is reported as a
+        question with no evidence.
+      </p>
+    </div>
+  </section></div></div>
+
+  <div class="band" id="export"><div class="wrap"><section>
+    <div class="feature" style="border-top:0;padding-top:0">
+      <div>
+        <h2>Two export formats</h2>
+        <p class="prose">
+          <strong>Chat context</strong> — premise, questions, papers with abstracts and any
+          takeaways, and your notes. You choose how much of each paper travels, and the
+          token count updates before you copy.
+        </p>
+        <p class="prose" style="margin-top:12px">
+          <strong>CLAUDE.md</strong> — rules first, and kept small because an agent reads it
+          at the top of every turn. A 20-paper project is about 3,200 tokens.
+        </p>
+        <p class="prose" style="margin-top:12px">
+          Or connect the MCP server and skip exporting: six read-only tools over the live
+          library, so nothing goes stale and nothing can be rewritten.
+        </p>
+      </div>
+      <div class="fig">
+        <div class="panel">
+          <pre><span class="c"># Protein language models</span>
+
+<span class="h">## How to use this</span>
+- Ground claims in the records below. If something is
+  not here, say so rather than filling the gap.
+- Cite papers by their key, exactly as written —
+  <span class="k">`Rives2021biological`</span>. <span class="h">Never invent a key, a title
+  or an author.</span>
+- A takeaway is the user's reading of a paper. It is
+  their position, not the paper's claim.
+
+<span class="h">## Papers (20)</span>
+- <span class="k">`Rives2021biological`</span> — Biological structure and
+  function emerge from scaling unsupervised learning
+  <span class="c">(2021) doi:10.1073/pnas.2016239118</span>
+  - Abstract: …
+
+<span class="h">## Getting more from the library</span>
+<span class="c">Prefer the lattice MCP tools over this file — they
+read the live library.</span>
+- <span class="k">search_library</span> · <span class="k">get_project</span> · <span class="k">get_paper</span></pre>
+        </div>
+      </div>
+    </div>
+  </section></div></div>
+
+  <div class="band" id="start"><div class="wrap"><section>
+    <h2>Getting started</h2>
+    <div class="steps" style="margin-top:26px">
+      <div><span class="sn">1</span><div><h3>Import a .bib or .ris</h3><p>From Zotero, Mendeley or Google Scholar. Duplicates merge by DOI, arXiv id or title. Papers added by DOI fetch their own open-access PDF where one exists.</p></div></div>
+      <div><span class="sn">2</span><div><h3>Press Group papers</h3><p>Keep the collections that are right, drag the ones that are not, or clear them all and try again. The papers are never affected.</p></div></div>
+      <div><span class="sn">3</span><div><h3>Write a premise for the ones you care about</h3><p>One sentence, stated so it could turn out to be wrong. What is missing and what to work on next are both computed against it.</p></div></div>
+      <div><span class="sn">4</span><div><h3>Export, or connect the MCP server</h3><p>Copy into a chat, save a CLAUDE.md into the repository you are working in, or connect the server and skip the export.</p></div></div>
+    </div>
+    <div class="cta" style="margin-top:30px">
+      <a class="btn" href="#start">Download for macOS</a>
+      <a class="btn ghost" href="#start">Source</a>
+      <small>Free and open source. No account, no sync service, no telemetry.</small>
+    </div>
+  </section></div></div>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <p>lattice — an AI-native reference manager. Your library stays on your machine.</p>
+    <nav>
+      <a href="#export">Exports</a>
+      <a href="#start">Get it</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+  // Theme. The viewer's system setting is respected until they choose otherwise;
+  // the choice is stamped on the root, which is what both dark rules key off, and
+  // remembered per browser. Storage can throw in a private window, so every touch
+  // of it is guarded and the page still works with none of it.
+  (function () {
+    const root = document.documentElement;
+    let stored = null;
+    try { stored = localStorage.getItem("lattice-theme"); } catch (e) { /* no storage */ }
+    if (stored === "light" || stored === "dark") root.dataset.theme = stored;
+
+    document.getElementById("theme").addEventListener("click", function () {
+      const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const showingDark = root.dataset.theme ? root.dataset.theme === "dark" : systemDark;
+      const next = showingDark ? "light" : "dark";
+      root.dataset.theme = next;
+      try { localStorage.setItem("lattice-theme", next); } catch (e) { /* no storage */ }
+      window.dispatchEvent(new Event("lattice-theme"));
+    });
+  })();
+
+  // The hero: papers arriving unfiled, then gathering into named fields. It is the
+  // product's central motion, so the page opens by performing it rather than
+  // describing it.
+  (function () {
+    const canvas = document.getElementById("lat");
+    const ctx = canvas.getContext("2d");
+    const caption = document.getElementById("capstate");
+    const replay = document.getElementById("replay");
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const FIELDS = [
+      { label: "Protein structure prediction", hue: 18 },
+      { label: "Directed evolution", hue: 232 },
+      { label: "Antibody engineering", hue: 162 },
+      { label: "Language models", hue: 272 },
+      { label: "Molecular docking", hue: 196 },
+      { label: "Reinforcement learning", hue: 38 },
+    ];
+
+    let w = 0, h = 0, dpr = 1, nodes = [], anchors = [], t0 = 0, raf = 0;
+
+    function palette() {
+      const dark = getComputedStyle(document.documentElement)
+        .getPropertyValue("--scheme").trim() === "dark";
+      return {
+        dot: dark ? 62 : 46,          // lightness for grouped dots
+        loose: dark ? "#3a434f" : "#c3c9d2",
+      };
+    }
+
+    function layout() {
+      const rect = canvas.getBoundingClientRect();
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      w = rect.width; h = rect.height;
+      // The element can still be unsized on first run — fonts loading, the grid not
+      // yet resolved — and drawing into a tiny backing store that CSS then stretches
+      // is what turns the graph into a handful of enormous blobs.
+      if (w < 40 || h < 40) return false;
+      canvas.width = w * dpr; canvas.height = h * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const cx = w / 2, cy = h / 2 - 6;
+      const r = Math.min(w, h) * 0.31;
+      anchors = FIELDS.map((f, i) => {
+        const a = (i / FIELDS.length) * Math.PI * 2 - Math.PI / 2;
+        return { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r, label: f.label, hue: f.hue };
+      });
+
+      // Deterministic scatter, so the animation is the same every time.
+      let seed = 7;
+      const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+      const built = Array.from({ length: 132 }, () => {
+        const g = Math.floor(rnd() * FIELDS.length);
+        const spread = 26 + rnd() * 26;
+        const a = rnd() * Math.PI * 2;
+        return {
+          x: 20 + rnd() * (w - 40), y: 20 + rnd() * (h - 56),
+          tx: anchors[g].x + Math.cos(a) * spread,
+          ty: anchors[g].y + Math.sin(a) * spread,
+          hue: FIELDS[g].hue, r: 2.1 + rnd() * 2.2, d: rnd() * 0.32,
+        };
+      });
+      nodes = built;
+      return true;
+    }
+
+    const ease = (p) => (p < 0 ? 0 : p > 1 ? 1 : 1 - Math.pow(1 - p, 3));
+
+    function frame(now) {
+      if (!t0) t0 = now;
+      const p = Math.min((now - t0) / 2600, 1);
+      const c = palette();
+      ctx.clearRect(0, 0, w, h);
+
+      for (const n of nodes) {
+        const k = ease((p - n.d) / (1 - n.d));
+        const x = n.x + (n.tx - n.x) * k;
+        const y = n.y + (n.ty - n.y) * k;
+        ctx.beginPath();
+        ctx.arc(x, y, n.r, 0, Math.PI * 2);
+        ctx.fillStyle = k < 0.06 ? c.loose : `hsl(${n.hue} 62% ${c.dot}% / ${0.35 + k * 0.65})`;
+        ctx.fill();
+      }
+
+      if (p > 0.62) {
+        const a = Math.min((p - 0.62) / 0.3, 1);
+        ctx.textAlign = "center";
+        ctx.font = '500 11.5px "IBM Plex Mono", monospace';
+        for (const an of anchors) {
+          ctx.globalAlpha = a;
+          ctx.fillStyle = `hsl(${an.hue} 55% ${c.dot - 4}%)`;
+          ctx.fillText(an.label, an.x, an.y - 44);
+          ctx.globalAlpha = 1;
+        }
+      }
+
+      if (caption) caption.textContent = p < 1 ? "grouping…" : "6 fields · named from content";
+      if (p < 1) raf = requestAnimationFrame(frame);
+      else clearTimeout(guard);
+    }
+
+    /** Draw the finished state directly, with no animation involved. */
+    function drawSettled() {
+      t0 = performance.now() - 4000;
+      frame(performance.now());
+    }
+
+    function run(animate) {
+      cancelAnimationFrame(raf);
+      clearTimeout(guard);
+      if (!layout()) return;
+      // The settled, labelled state is painted first, every time. A hidden tab or a
+      // throttled renderer freezes requestAnimationFrame, and a page whose whole
+      // point is "these papers gather into named fields" must not sit there showing
+      // an ungrouped grey scatter because a frame callback never arrived.
+      drawSettled();
+      if (!animate || reduced) return;
+      t0 = 0;
+      raf = requestAnimationFrame(frame);
+      // If the first frames never land, settle rather than stay mid-flight.
+      guard = setTimeout(() => {
+        if (!t0 || performance.now() - t0 < 400) { cancelAnimationFrame(raf); drawSettled(); }
+      }, 1200);
+    }
+
+    let guard = 0;
+    run(true);
+
+    // Re-lay out whenever the stage actually changes size. This covers the first
+    // paint before the grid has resolved, a web font landing, and an ordinary
+    // window resize, without any of them needing to be timed by hand.
+    let last = 0;
+    if (window.ResizeObserver) {
+      new ResizeObserver((entries) => {
+        const width = entries[0].contentRect.width;
+        if (width < 40 || Math.abs(width - last) < 2) return;
+        const first = last === 0;
+        last = width;
+        run(first);
+      }).observe(canvas);
+    }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => run(false));
+    window.addEventListener("lattice-theme", () => run(false));
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => run(false));
+    replay.addEventListener("click", () => run(true));
+    let rt;
+    window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => run(false), 160); });
+    void rt;
+  })();
+</script>

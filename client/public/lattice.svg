@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- The app mark: six nodes and one chord across them. The vertices sit off a true
+       hexagon and the radii vary, so it reads as a cluster that settled into this
+       shape rather than a shape that was drawn. No letterform - the thing the app is
+       about is the shape of the connections. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#101826"/>
+      <stop offset="1" stop-color="#070b12"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="114" fill="url(#bg)"/>
+
+  <!-- Links first, so the nodes sit on top of their ends. -->
+  <g stroke="#22d3ee" fill="none" stroke-linecap="round">
+    <g stroke-opacity="0.5" stroke-width="22">
+      <path d="M279 100 L119 171"/>
+      <path d="M119 171 L147 339"/>
+      <path d="M147 339 L235 410"/>
+      <path d="M235 410 L397 329"/>
+      <path d="M397 329 L365 183"/>
+      <path d="M365 183 L279 100"/>
+    </g>
+    <!-- The chord: what keeps this from reading as a plain polygon. -->
+    <g stroke-opacity="0.85" stroke-width="26">
+      <path d="M119 171 L397 329"/>
+    </g>
+  </g>
+
+  <g fill="#22d3ee">
+    <circle cx="279" cy="100" r="23"/>
+    <!-- The hubs: the chord's endpoints, drawn brightest and largest. -->
+    <circle cx="119" cy="171" r="41" fill="#67e8f9"/>
+    <circle cx="147" cy="339" r="28"/>
+    <circle cx="235" cy="410" r="22"/>
+    <circle cx="397" cy="329" r="36" fill="#67e8f9"/>
+    <circle cx="365" cy="183" r="27"/>
+  </g>
+</svg>

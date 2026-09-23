@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Paper } from "../types";
-import { bibliographyFilename, citationKey, papersToBibTeX } from "../lib/citations";
+import { bibliographyFilename, citationKey, formatCitation, papersToBibTeX, papersToRis } from "../lib/citations";
 
 const paper: Paper = {
   id: "p1", title: "Attention & Research", authors: ["Ada Lovelace", "Grace Hopper"],
@@ -22,5 +22,30 @@ describe("BibTeX export", () => {
     const bib = papersToBibTeX([paper, { ...paper, id: "p2" }]);
     expect(bib).toContain("@article{Lovelace2026attention2,");
     expect(bibliographyFilename("My Reading List")).toBe("lattice-my-reading-list.bib");
+  });
+
+  it("exports bibliographic item types with appropriate fields", () => {
+    const book = papersToBibTeX([{ ...paper, itemType: "book", venue: "Test Press" }]);
+    expect(book).toContain("@book{Lovelace2026attention,");
+    expect(book).toContain("publisher = {Test Press}");
+    const proceedings = papersToBibTeX([{ ...paper, itemType: "conferencePaper" }]);
+    expect(proceedings).toContain("@inproceedings{");
+    expect(proceedings).toContain("booktitle = {Journal of Tests}");
+  });
+
+  it("formats readable citations for common styles", () => {
+    expect(formatCitation(paper, "apa")).toContain("Lovelace, A.");
+    expect(formatCitation(paper, "apa")).toContain("(2026)");
+    expect(formatCitation(paper, "mla")).toContain("“Attention & Research.”");
+    expect(formatCitation(paper, "chicago")).toContain("https://doi.org/10.1/test");
+  });
+
+  it("exports portable RIS records", () => {
+    const ris = papersToRis([{ ...paper, tags: ["methods"] }]);
+    expect(ris).toContain("TY  - JOUR");
+    expect(ris).toContain("AU  - Ada Lovelace");
+    expect(ris).toContain("DO  - 10.1/test");
+    expect(ris).toContain("KW  - methods");
+    expect(ris).toContain("ER  -");
   });
 });

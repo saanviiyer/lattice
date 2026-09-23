@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- The app mark: six nodes on a hexagon, the rim faint, one chord across it, and
+       the chord's endpoints enlarged the way the knowledge graph enlarges a hub. No
+       letterform - the thing the app is about is the shape of the connections. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#101826"/>
+      <stop offset="1" stop-color="#070b12"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="114" fill="url(#bg)"/>
+
+  <!-- Links first, so the nodes sit on top of their ends. -->
+  <g stroke="#22d3ee" fill="none" stroke-linecap="round">
+    <g stroke-opacity="0.5" stroke-width="22">
+      <path d="M256 113 L132 185"/>
+      <path d="M132 185 L132 327"/>
+      <path d="M132 327 L256 399"/>
+      <path d="M256 399 L380 327"/>
+      <path d="M380 327 L380 185"/>
+      <path d="M380 185 L256 113"/>
+    </g>
+    <!-- The chord: what keeps this from reading as a plain polygon. -->
+    <g stroke-opacity="0.85" stroke-width="26">
+      <path d="M132 185 L380 327"/>
+    </g>
+  </g>
+
+  <g fill="#22d3ee">
+    <circle cx="256" cy="113" r="26"/>
+    <!-- The hubs: the chord's endpoints, drawn brightest and largest. -->
+    <circle cx="132" cy="185" r="38" fill="#67e8f9"/>
+    <circle cx="132" cy="327" r="26"/>
+    <circle cx="256" cy="399" r="26"/>
+    <circle cx="380" cy="327" r="35" fill="#67e8f9"/>
+    <circle cx="380" cy="185" r="26"/>
+  </g>
+</svg>

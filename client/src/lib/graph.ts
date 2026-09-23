@@ -2,24 +2,36 @@
 // Pure functions (no storage, no DOM) so they can be unit-tested and reused by the
 // backlinks panel and the force-directed graph view.
 
-import type { GraphData, GraphEdge, GraphNode, Note, Paper } from "../types";
+import type {
+  GraphData,
+  GraphEdge,
+  GraphNode,
+  GraphNodeType,
+  Note,
+  Paper,
+  ResearchQuestion,
+} from "../types";
 import { normalizeTitle, parseWikilinks } from "./wikilink";
 
 // A lightweight index mapping a normalized title -> node id, for resolving [[links]].
 export interface TitleIndex {
   byTitle: Map<string, string>; // normalized title -> id
   labelOf: Map<string, string>; // id -> display label
-  typeOf: Map<string, "paper" | "note">; // id -> node type
+  typeOf: Map<string, GraphNodeType>; // id -> node type
 }
 
 // Build a title index across all papers and notes. Later entries do not overwrite an
 // earlier title (first registration wins), so titles resolve deterministically.
-export function buildTitleIndex(papers: Paper[], notes: Note[]): TitleIndex {
+export function buildTitleIndex(
+  papers: Paper[],
+  notes: Note[],
+  questions: ResearchQuestion[] = []
+): TitleIndex {
   const byTitle = new Map<string, string>();
   const labelOf = new Map<string, string>();
-  const typeOf = new Map<string, "paper" | "note">();
+  const typeOf = new Map<string, GraphNodeType>();
 
-  const register = (id: string, title: string, type: "paper" | "note") => {
+  const register = (id: string, title: string, type: GraphNodeType) => {
     labelOf.set(id, title);
     typeOf.set(id, type);
     const key = normalizeTitle(title);
@@ -28,6 +40,7 @@ export function buildTitleIndex(papers: Paper[], notes: Note[]): TitleIndex {
 
   for (const p of papers) register(p.id, p.title || "Untitled paper", "paper");
   for (const n of notes) register(n.id, n.title || "Untitled note", "note");
+  for (const q of questions) register(q.id, q.title || "Untitled question", "question");
 
   return { byTitle, labelOf, typeOf };
 }
@@ -59,12 +72,22 @@ export function backlinksFor(
   return notes.filter((n) => resolveLinks(n.id, n.body, index).includes(targetId));
 }
 
-// Build the full graph: papers + notes as nodes; wikilink edges plus the implicit
-// paper<->note relation (a note with paperId is linked to its paper). Edges are
+// Build the full graph. Nodes are papers, notes, and research questions. Edges are
+// [[wikilinks]] from note bodies, the implicit paper<->note relation (a note with a
+// paperId is linked to its paper), explicit related-paper connections, and the
+// evidence relation from a question to each paper investigating it. Edges are
 // de-duplicated so a note that both is-attached-to and links a paper yields one edge.
-export function buildGraph(papers: Paper[], notes: Note[]): GraphData {
-  const index = buildTitleIndex(papers, notes);
-  const ids = new Set<string>([...papers.map((p) => p.id), ...notes.map((n) => n.id)]);
+export function buildGraph(
+  papers: Paper[],
+  notes: Note[],
+  questions: ResearchQuestion[] = []
+): GraphData {
+  const index = buildTitleIndex(papers, notes, questions);
+  const ids = new Set<string>([
+    ...papers.map((p) => p.id),
+    ...notes.map((n) => n.id),
+    ...questions.map((q) => q.id),
+  ]);
 
   const nodes: GraphNode[] = [
     ...papers.map((p) => ({
@@ -76,6 +99,11 @@ export function buildGraph(papers: Paper[], notes: Note[]): GraphData {
       id: n.id,
       label: n.title || "Untitled note",
       type: "note" as const,
+    })),
+    ...questions.map((q) => ({
+      id: q.id,
+      label: q.title || "Untitled question",
+      type: "question" as const,
     })),
   ];
 
@@ -95,6 +123,16 @@ export function buildGraph(papers: Paper[], notes: Note[]): GraphData {
     if (n.paperId && ids.has(n.paperId)) addEdge(n.id, n.paperId, "paper-note");
     for (const targetId of resolveLinks(n.id, n.body, index)) {
       addEdge(n.id, targetId, "wikilink");
+    }
+  }
+  for (const paper of papers) {
+    for (const relatedId of paper.relatedPaperIds || []) {
+      addEdge(paper.id, relatedId, "related");
+    }
+  }
+  for (const question of questions) {
+    for (const paperId of question.linkedPaperIds || []) {
+      addEdge(question.id, paperId, "question-paper");
     }
   }
 

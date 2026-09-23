@@ -2,23 +2,40 @@
 // sidebar on the right, plus AI actions (explain a highlight, synthesize highlights
 // into a note).
 
+import type { ProjectFit, SimilarPaper } from "../lib/paperSimilarity";
 import { useEffect, useState } from "react";
-import type { Collection, Highlight, HighlightColor, Paper } from "../types";
-import { HIGHLIGHT_COLORS } from "../types";
+import type { Collection, Highlight, HighlightColor, Paper, ResearchQuestion } from "../types";
+import { HIGHLIGHT_COLORS, ITEM_TYPE_LABELS } from "../types";
 import { repo } from "../lib/repository";
 import { getPdf, putPdf } from "../lib/blobStore";
-import { explainHighlight, metadataFromPdf, synthesizeNote } from "../lib/api";
+import { canFetchPdf, explainHighlight, metadataFromPdf, synthesizeNote } from "../lib/api";
 import { annotatedPdfFilename, createAnnotatedPdf } from "../lib/annotatedPdf";
+import { citationKey } from "../lib/citations";
 import PdfReader from "./PdfReader";
-import { IconSparkle, IconTrash, IconNote, IconBack } from "./Icons";
+import { ProjectLabel } from "./ProjectDots";
+import { IconCopy, IconSparkle, IconStar, IconTrash, IconNote, IconBack } from "./Icons";
 
 interface Props {
   paper: Paper;
+  papers: Paper[];
   collections: Collection[];
+  questions: ResearchQuestion[];
+  /** True while an open-access PDF is being fetched for this paper. */
+  fetchingPdf: boolean;
+  onFetchPdf: () => void;
+  /** Open the quick-file dialog for this paper. */
+  onFile: () => void;
   onBack: () => void;
   onOpenPaperNote: (paperId: string) => void;
   onNoteCreated: () => void;
   onPaperUpdated: () => void;
+  onQuestionUpdated: () => void;
+  /** Papers in the library about the same thing, with what they share. */
+  similar?: SimilarPaper[];
+  /** Projects this paper sits close to but is not filed in. */
+  projectFits?: ProjectFit[];
+  onOpenPaper?: (id: string) => void;
+  onAddToProject?: (projectId: string) => void;
 }
 
 const COLOR_SWATCH: Record<HighlightColor, string> = {
@@ -31,11 +48,21 @@ const COLOR_SWATCH: Record<HighlightColor, string> = {
 
 export default function PaperView({
   paper,
+  papers,
   collections,
+  questions,
+  fetchingPdf,
+  onFetchPdf,
+  onFile,
   onBack,
   onOpenPaperNote,
   onNoteCreated,
   onPaperUpdated,
+  onQuestionUpdated,
+  similar = [],
+  projectFits = [],
+  onOpenPaper,
+  onAddToProject,
 }: Props) {
   const [blob, setBlob] = useState<Blob | null>(null);
   const [blobState, setBlobState] = useState<"loading" | "none" | "ready">(
@@ -51,9 +78,11 @@ export default function PaperView({
   const [aiBusy, setAiBusy] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [showAbstract, setShowAbstract] = useState(false);
   const [tagDraft, setTagDraft] = useState(paper.tags.join(", "));
   const [pdfBusy, setPdfBusy] = useState(false);
   const [detailsDraft, setDetailsDraft] = useState(() => metadataDraft(paper));
+  const [takeawayDraft, setTakeawayDraft] = useState(paper.takeaway || "");
 
   function refreshHighlights() {
     setHighlights(repo.listHighlights(paper.id));
@@ -81,6 +110,7 @@ export default function PaperView({
   useEffect(() => {
     setTagDraft(paper.tags.join(", "));
     setDetailsDraft(metadataDraft(paper));
+    setTakeawayDraft(paper.takeaway || "");
   }, [paper.id, paper.tags]);
 
   function saveDetails() {
@@ -96,6 +126,7 @@ export default function PaperView({
     }
     repo.updatePaper(paper.id, {
       title,
+      itemType: detailsDraft.itemType,
       authors: detailsDraft.authors.split("\n").map((author) => author.trim()).filter(Boolean),
       year: parsedYear,
       venue: detailsDraft.venue.trim(),
@@ -153,6 +184,34 @@ export default function PaperView({
       ? paper.collectionIds.filter((collectionId) => collectionId !== id)
       : [...paper.collectionIds, id];
     repo.setPaperCollections(paper.id, next);
+    onPaperUpdated();
+  }
+
+  function updateWorkflow(patch: Partial<Paper>) {
+    repo.updatePaper(paper.id, patch);
+    onPaperUpdated();
+  }
+
+  function toggleQuestion(question: ResearchQuestion) {
+    const linkedPaperIds = question.linkedPaperIds.includes(paper.id)
+      ? question.linkedPaperIds.filter((id) => id !== paper.id)
+      : [...question.linkedPaperIds, paper.id];
+    repo.updateQuestion(question.id, { linkedPaperIds });
+    onQuestionUpdated();
+  }
+
+  function toggleRelated(related: Paper) {
+    const isLinked = (paper.relatedPaperIds || []).includes(related.id);
+    repo.updatePaper(paper.id, {
+      relatedPaperIds: isLinked
+        ? (paper.relatedPaperIds || []).filter((id) => id !== related.id)
+        : [...(paper.relatedPaperIds || []), related.id],
+    });
+    repo.updatePaper(related.id, {
+      relatedPaperIds: isLinked
+        ? (related.relatedPaperIds || []).filter((id) => id !== paper.id)
+        : [...(related.relatedPaperIds || []), paper.id],
+    });
     onPaperUpdated();
   }
 
@@ -240,28 +299,64 @@ export default function PaperView({
     }
   }
 
+  async function copyCitationKey() {
+    await navigator.clipboard.writeText(citationKey(paper));
+    setStatus(`Copied citation key: ${citationKey(paper)}`);
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-slate-800 bg-slate-900">
+      <div className="flex flex-wrap items-center gap-2 md:gap-3 px-3 md:px-4 py-2 border-b border-slate-800 bg-slate-900">
         <button
           onClick={onBack}
           className="text-slate-400 hover:text-slate-200 flex items-center gap-1 text-sm"
         >
           <IconBack /> Library
         </button>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-48">
           <div className="truncate font-medium">{paper.title || "Untitled paper"}</div>
-          <div className="truncate text-xs text-slate-500">
-            {paper.authors.slice(0, 4).join(", ")}
-            {paper.year ? ` · ${paper.year}` : ""}
-            {paper.venue ? ` · ${paper.venue}` : ""}
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <span className="truncate">
+              {paper.authors.slice(0, 4).join(", ")}
+              {paper.year ? ` · ${paper.year}` : ""}
+              {paper.venue ? ` · ${paper.venue}` : ""}
+            </span>
+            <span className="shrink-0 text-slate-800">·</span>
+            <span className="max-w-48 shrink-0">
+              <ProjectLabel
+                collections={collections}
+                collectionIds={paper.collectionIds}
+                onClick={onFile}
+                label={paper.title || "this paper"}
+              />
+            </span>
           </div>
         </div>
+        <select
+          value={paper.readingStatus || "inbox"}
+          onChange={(event) => updateWorkflow({ readingStatus: event.target.value as Paper["readingStatus"] })}
+          className={`lat-status status-${paper.readingStatus || "inbox"} bg-transparent outline-none`}
+          title="Reading status"
+        >
+          <option value="inbox">To read</option>
+          <option value="reading">In progress</option>
+          <option value="read">Read</option>
+        </select>
+        <button onClick={() => updateWorkflow({ favorite: !paper.favorite })} className={`rounded-md p-1.5 ${paper.favorite ? "text-amber-300" : "text-slate-600 hover:text-amber-300"}`} aria-label={paper.favorite ? "Remove from favorites" : "Add to favorites"}><IconStar filled={paper.favorite} /></button>
+        <button
+          onClick={() => setShowAbstract((visible) => !visible)}
+          aria-expanded={showAbstract}
+          className={`text-sm rounded-md px-3 py-1.5 ${showAbstract ? "bg-slate-700 text-slate-100" : "bg-slate-800 hover:bg-slate-700"}`}
+          title={paper.abstract ? "Show the abstract" : "No abstract was captured for this paper"}
+        >
+          Abstract
+        </button>
+        <button onClick={() => void copyCitationKey()} className="hidden xl:flex items-center gap-1.5 rounded-md border border-veil/[.07] bg-veil/[.03] px-2.5 py-1.5 font-mono text-[11px] text-slate-500 hover:text-cyan-300" title="Copy citation key">{citationKey(paper)} <IconCopy width={12} /></button>
         <button
           onClick={() => setShowDetails((visible) => !visible)}
           className={`text-sm rounded-md px-3 py-1.5 ${
-            showDetails ? "bg-indigo-600" : "bg-slate-800 hover:bg-slate-700"
+            showDetails ? "bg-indigo-600 text-white" : "bg-slate-800 hover:bg-slate-700"
           }`}
         >
           Organize
@@ -298,9 +393,66 @@ export default function PaperView({
         )}
       </div>
 
+      {/* Where this paper sits in the library: its nearest neighbours, and projects it
+          looks like it belongs in. Each shows what it shares, so it can be checked. */}
+      {(similar.length > 0 || projectFits.length > 0) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-slate-800 bg-slate-900/40 px-4 py-2 text-xs">
+          {similar.length > 0 && (
+            <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+              <span className="text-slate-500">Similar in your library:</span>
+              {similar.slice(0, 3).map((item) => (
+                <button
+                  key={item.paper.id}
+                  onClick={() => onOpenPaper?.(item.paper.id)}
+                  className="lat-chip max-w-[16rem] truncate !py-0.5"
+                  title={`${item.paper.title}\nShares: ${item.shared.join(", ") || "vocabulary"}`}
+                >
+                  {item.paper.title}
+                </button>
+              ))}
+            </span>
+          )}
+          {projectFits.map((fit) => (
+            <span key={fit.project.id} className="flex items-center gap-1.5">
+              <span className="text-slate-500">Looks like it belongs in</span>
+              <button
+                onClick={() => onAddToProject?.(fit.project.id)}
+                className="lat-chip !py-0.5"
+                title={`Closest to: ${fit.closest.map((p) => p.title).join("; ")}. Click to file it there.`}
+              >
+                {fit.project.name} +
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* The abstract, on demand: enough to remember what a paper is without
+          opening the PDF, and out of the way the rest of the time. */}
+      {showAbstract && (
+        <div className="border-b border-slate-800 bg-slate-900/70 px-4 py-3">
+          <div className="flex items-baseline justify-between">
+            <h2 className="lat-kicker">Abstract</h2>
+            <button onClick={() => setShowAbstract(false)} className="text-[11px] text-slate-500 hover:text-slate-300">Hide</button>
+          </div>
+          {paper.abstract ? (
+            <p className="lat-scroll mt-2 max-h-[28vh] max-w-3xl overflow-y-auto whitespace-pre-wrap text-sm leading-6 text-slate-300">
+              {paper.abstract}
+            </p>
+          ) : (
+            <p className="mt-2 text-sm text-slate-600">
+              No abstract was captured for this paper. You can paste one under Organize.
+            </p>
+          )}
+        </div>
+      )}
+
       {showDetails && (
         <div className="border-b border-slate-800 bg-slate-900/70 px-4 py-3 space-y-4 max-h-[46vh] overflow-auto">
           <div className="grid gap-3 lg:grid-cols-2">
+            <label className="text-xs text-slate-400">Item type
+              <select value={detailsDraft.itemType} onChange={(event) => setDetailsDraft({ ...detailsDraft, itemType: event.target.value as NonNullable<Paper["itemType"]> })} className="mt-1 block w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-cyan-500">{Object.entries(ITEM_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+            </label>
             <label className="text-xs text-slate-400">Title
               <input value={detailsDraft.title} onChange={(event) => setDetailsDraft({ ...detailsDraft, title: event.target.value })} className="mt-1 block w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-indigo-500" />
             </label>
@@ -323,7 +475,7 @@ export default function PaperView({
           <label className="block text-xs text-slate-400">Abstract
             <textarea value={detailsDraft.abstract} onChange={(event) => setDetailsDraft({ ...detailsDraft, abstract: event.target.value })} rows={3} className="mt-1 block w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-indigo-500 resize-y" />
           </label>
-          <button onClick={saveDetails} className="text-sm bg-indigo-600 hover:bg-indigo-500 rounded px-3 py-1.5">Save details</button>
+          <button onClick={saveDetails} className="text-sm bg-indigo-600 text-white hover:bg-indigo-500 rounded px-3 py-1.5">Save details</button>
           <div className="grid gap-4 lg:grid-cols-2">
           <label className="text-xs text-slate-400">
             Tags <span className="text-slate-600">(comma separated)</span>
@@ -339,7 +491,7 @@ export default function PaperView({
             />
           </label>
           <fieldset>
-            <legend className="text-xs text-slate-400 mb-1">Collections</legend>
+            <legend className="text-xs text-slate-400 mb-1">Projects</legend>
             <div className="flex flex-wrap gap-2">
               {collections.map((collection) => (
                 <label
@@ -356,15 +508,53 @@ export default function PaperView({
                 </label>
               ))}
               {collections.length === 0 && (
-                <span className="text-xs text-slate-600">Create a collection from the sidebar first.</span>
+                <span className="text-xs text-slate-600">Create a project in the sidebar first.</span>
               )}
             </div>
           </fieldset>
           </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div>
+              <label className="text-xs text-slate-400">Reading priority
+                <select value={paper.priority || "later"} onChange={(event) => updateWorkflow({ priority: event.target.value as Paper["priority"] })} className="mt-1 block w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-cyan-500">
+                  <option value="later">Later</option>
+                  <option value="next">Read next</option>
+                  <option value="deep-dive">Deep dive</option>
+                </select>
+              </label>
+              <label className="mt-3 block text-xs text-slate-400">My one-line takeaway
+                <textarea value={takeawayDraft} onChange={(event) => setTakeawayDraft(event.target.value)} onBlur={() => updateWorkflow({ takeaway: takeawayDraft.trim() })} placeholder="What should future-you remember?" rows={3} className="mt-1 block w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-500 resize-y" />
+              </label>
+            </div>
+            <fieldset>
+              <legend className="text-xs text-slate-400 mb-1">Related research questions</legend>
+              <div className="space-y-1.5 max-h-36 overflow-auto">
+                {questions.map((question) => (
+                  <label key={question.id} className="flex items-start gap-2 rounded bg-slate-800 px-2.5 py-2 text-xs text-slate-300 cursor-pointer">
+                    <input type="checkbox" checked={question.linkedPaperIds.includes(paper.id)} onChange={() => toggleQuestion(question)} className="mt-0.5 accent-cyan-400" />
+                    <span>{question.title}</span>
+                  </label>
+                ))}
+                {questions.length === 0 && <p className="text-xs text-slate-600">Capture a question from the research desk, then link this paper to it here.</p>}
+              </div>
+            </fieldset>
+          </div>
+          <fieldset>
+            <legend className="text-xs text-slate-400 mb-1">Related papers <span className="text-slate-600">· appears in the knowledge graph</span></legend>
+            <div className="grid max-h-32 gap-1.5 overflow-auto sm:grid-cols-2 lg:grid-cols-3">
+              {papers.filter((item) => item.id !== paper.id).map((item) => (
+                <label key={item.id} className="flex items-start gap-2 rounded bg-slate-800 px-2.5 py-2 text-xs text-slate-300 cursor-pointer">
+                  <input type="checkbox" checked={(paper.relatedPaperIds || []).includes(item.id)} onChange={() => toggleRelated(item)} className="mt-0.5 accent-cyan-400" />
+                  <span className="line-clamp-2">{item.title}</span>
+                </label>
+              ))}
+              {papers.length <= 1 && <p className="text-xs text-slate-600">Add another paper to build an explicit relationship.</p>}
+            </div>
+          </fieldset>
         </div>
       )}
 
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-col lg:flex-row flex-1 min-h-0">
         {/* PDF surface */}
         <div className="flex-1 min-w-0 flex flex-col">
           {blobState === "ready" ? (
@@ -377,7 +567,7 @@ export default function PaperView({
                     onClick={() => setActiveColor(c)}
                     title={c}
                     className={`w-5 h-5 rounded-full border-2 ${
-                      activeColor === c ? "border-white" : "border-transparent"
+                      activeColor === c ? "border-slate-100" : "border-transparent"
                     }`}
                     style={{ background: COLOR_SWATCH[c] }}
                   />
@@ -424,20 +614,35 @@ export default function PaperView({
               Loading PDF…
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-center text-slate-500 gap-2 p-8">
+            <div className="flex-1 flex flex-col items-center justify-center text-center text-slate-500 gap-3 p-8">
               <p className="max-w-sm">
-                No PDF is stored for this paper. It was added by DOI or arXiv (metadata
-                only). PDF annotation needs an uploaded PDF file.
+                {fetchingPdf
+                  ? "Looking for an open-access copy of this paper…"
+                  : "No PDF is stored for this paper yet — it was added as metadata only, and annotating needs the file itself."}
+              </p>
+              {canFetchPdf(paper) && (
+                <button
+                  onClick={onFetchPdf}
+                  disabled={fetchingPdf}
+                  className="lat-primary px-4 py-2 text-sm disabled:opacity-50"
+                >
+                  {fetchingPdf ? "Searching…" : "Find the PDF for me"}
+                </button>
+              )}
+              <p className="max-w-sm text-xs leading-5">
+                {canFetchPdf(paper)
+                  ? "Checks arXiv, Unpaywall, OpenAlex, and the publisher's own link. Behind a paywall, attach your own copy with Attach PDF above."
+                  : "Add a DOI or arXiv id under Organize and lattice can try to find the file itself. Otherwise use Attach PDF above."}
               </p>
               <p className="text-xs">
-                You can still write linked notes for it from the Notes button.
+                You can write linked notes for it either way, from the Notes button.
               </p>
             </div>
           )}
         </div>
 
         {/* Highlights sidebar */}
-        <aside className="w-80 shrink-0 border-l border-slate-800 bg-slate-900 flex flex-col min-h-0">
+        <aside className="w-full lg:w-80 max-h-[42vh] lg:max-h-none shrink-0 border-t lg:border-t-0 lg:border-l border-slate-800 bg-slate-900 flex flex-col min-h-0">
           <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800">
             <h3 className="font-medium text-sm">
               Highlights ({highlights.length})
@@ -445,7 +650,7 @@ export default function PaperView({
             <button
               onClick={synthesize}
               disabled={aiBusy || highlights.length === 0}
-              className="text-xs flex items-center gap-1 bg-indigo-600/80 hover:bg-indigo-600 disabled:opacity-40 rounded px-2 py-1"
+              className="text-xs flex items-center gap-1 bg-indigo-600/80 text-white hover:bg-indigo-600 disabled:opacity-40 rounded px-2 py-1"
               title="Synthesize highlights into a note"
             >
               <IconSparkle /> Synthesize
@@ -490,7 +695,7 @@ export default function PaperView({
                               key={c}
                               onClick={() => setColor(h.id, c)}
                               className={`w-4 h-4 rounded-full border ${
-                                h.color === c ? "border-white" : "border-transparent"
+                                h.color === c ? "border-slate-100" : "border-transparent"
                               }`}
                               style={{ background: COLOR_SWATCH[c] }}
                             />
@@ -536,6 +741,7 @@ export default function PaperView({
 
 function metadataDraft(paper: Paper) {
   return {
+    itemType: paper.itemType || "journalArticle" as NonNullable<Paper["itemType"]>,
     title: paper.title,
     authors: paper.authors.join("\n"),
     year: paper.year?.toString() || "",

@@ -56,6 +56,25 @@ export function rateLimited(name, minIntervalMs, fn) {
   return run;
 }
 
+// An upstream that says it is overloaded gets left alone for a while. Asking again
+// straight away is what turns a brief rate limit into a long one, and arXiv in
+// particular counts every request from a network against the same allowance.
+const cooldowns = new Map(); // name -> timestamp before which the upstream is left alone
+
+export function coolDown(name, ms) {
+  const until = Date.now() + Math.max(0, ms);
+  cooldowns.set(name, Math.max(cooldowns.get(name) || 0, until));
+}
+
+/** Milliseconds until `name` should be asked again; 0 when it is fine to ask now. */
+export function cooldownRemaining(name) {
+  return Math.max(0, (cooldowns.get(name) || 0) - Date.now());
+}
+
+export function clearCooldown(name) {
+  cooldowns.delete(name);
+}
+
 export function decodeEntities(s = "") {
   return s
     .replace(/&lt;/g, "<")

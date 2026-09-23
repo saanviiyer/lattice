@@ -5,7 +5,7 @@ import {
   backlinksFor,
   buildGraph,
 } from "../lib/graph";
-import type { Note, Paper } from "../types";
+import type { Note, Paper, ResearchQuestion } from "../types";
 
 function paper(id: string, title: string): Paper {
   return {
@@ -110,5 +110,69 @@ describe("buildGraph", () => {
       (e) => e.source === "n4" || e.target === "n4"
     );
     expect(p1Edges).toHaveLength(1);
+  });
+
+  it("includes explicit related-paper relationships once", () => {
+    const related = [
+      { ...paper("p1", "Transformers"), relatedPaperIds: ["p2"] },
+      { ...paper("p2", "Diffusion Models"), relatedPaperIds: ["p1"] },
+    ];
+    const graph = buildGraph(related, []);
+    expect(graph.edges).toEqual([{ source: "p1", target: "p2", kind: "related" }]);
+  });
+});
+
+function question(
+  id: string,
+  title: string,
+  linkedPaperIds: string[] = []
+): ResearchQuestion {
+  return {
+    id,
+    title,
+    detail: "",
+    status: "open",
+    linkedPaperIds,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+}
+
+describe("research questions in the graph", () => {
+  it("adds a question as a node and links it to each paper investigating it", () => {
+    const q = question("q1", "Does scale substitute for inductive bias?", ["p1", "p2"]);
+    const graph = buildGraph(papers, [], [q]);
+
+    expect(graph.nodes.find((n) => n.id === "q1")).toEqual({
+      id: "q1",
+      label: "Does scale substitute for inductive bias?",
+      type: "question",
+    });
+    expect(graph.edges).toEqual([
+      { source: "q1", target: "p1", kind: "question-paper" },
+      { source: "q1", target: "p2", kind: "question-paper" },
+    ]);
+  });
+
+  it("keeps a question with no evidence as an isolated node rather than dropping it", () => {
+    const graph = buildGraph(papers, [], [question("q1", "Open thread")]);
+    expect(graph.nodes.map((n) => n.id)).toContain("q1");
+    expect(graph.edges).toHaveLength(0);
+  });
+
+  it("ignores evidence links to papers that are no longer in the library", () => {
+    const graph = buildGraph(papers, [], [question("q1", "Stale", ["p1", "deleted"])]);
+    expect(graph.edges).toEqual([{ source: "q1", target: "p1", kind: "question-paper" }]);
+  });
+
+  it("resolves a [[wikilink]] from a note to a question title", () => {
+    const q = question("q1", "Does scale substitute for inductive bias?");
+    const n = note("n9", "Thinking", "This bears on [[Does scale substitute for inductive bias?]].");
+    const graph = buildGraph([], [n], [q]);
+    expect(graph.edges).toEqual([{ source: "n9", target: "q1", kind: "wikilink" }]);
+  });
+
+  it("stays backwards compatible when no questions are passed", () => {
+    expect(buildGraph(papers, notes).nodes.every((n) => n.type !== "question")).toBe(true);
   });
 });

@@ -2,8 +2,173 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* ---- Theme ----
+ * Dark keeps the exact values the app already used, so it is unchanged. Light is not
+ * an inversion of the hex codes but of the ramp's role: slate-950 is the page ground
+ * in both themes, slate-100 the strongest text in both. Components ask for a role and
+ * get the right colour for the theme.
+ *
+ * Contrast against each theme's ground is noted where it matters; the faint shades
+ * are the ones an inversion usually gets wrong, so they are pinned above 4.5:1
+ * rather than being whatever the scale happened to produce.
+ */
+:root,
+:root[data-theme="dark"] {
   color-scheme: dark;
+
+  /* Exactly Tailwind's slate, so dark renders as it always has. */
+  --c-slate-950: 2 6 23;
+  --c-slate-900: 15 23 42;
+  --c-slate-800: 30 41 59;
+  --c-slate-700: 51 65 85;
+  --c-slate-600: 71 85 105;
+  --c-text-600: 71 85 105;
+  --c-text-700: 51 65 85;
+  --c-text-800: 30 41 59;
+  --c-slate-500: 100 116 139;
+  --c-slate-400: 148 163 184;
+  --c-slate-300: 203 213 225;
+  --c-slate-200: 226 232 240;
+  --c-slate-100: 241 245 249;
+
+  --lat-body: #0b0f17;          /* the page behind the app shell */
+  --lat-body-ink: #e5e7eb;
+
+  --c-cyan-500: 6 182 212;
+  --c-cyan-400: 34 211 238;     /* accent */
+  --c-cyan-300: 103 232 249;    /* accent, hover: brighter on dark */
+  --c-cyan-200: 165 243 252;
+
+  --c-indigo-600: 79 70 229;
+  --c-indigo-500: 99 102 241;
+  --c-indigo-400: 129 140 248;
+  --c-indigo-300: 165 180 252;
+
+  --c-rose-500: 244 63 94;
+  --c-rose-400: 251 113 133;
+  --c-rose-300: 253 164 175;
+
+  --c-amber-500: 245 158 11;
+  --c-amber-400: 251 191 36;
+  --c-amber-300: 252 211 77;
+
+  --c-emerald-500: 16 185 129;
+  --c-emerald-400: 52 211 153;
+  --c-emerald-300: 110 231 183;
+
+  --c-sky-500: 14 165 233;
+  --c-sky-400: 56 189 248;
+  --c-sky-300: 125 211 252;
+  --c-fuchsia-300: 240 171 252;
+
+  --c-veil: 255 255 255;        /* hairlines are light over a dark ground */
+  --c-well: 0 0 0;
+
+  --c-surface-rail: 9 13 20;
+  --c-surface-header: 11 16 24;
+  --c-surface-card: 13 19 29;
+  --c-surface-raised: 20 27 38;
+  --c-surface-notice: 16 25 35;
+
+  --lat-quote-rule: #475569;
+  --lat-quote-text: #94a3b8;
+  --lat-link: #93c5fd;
+  --lat-wikilink: #a5b4fc;
+  --lat-wikilink-rule: rgba(165, 180, 252, 0.4);
+  --lat-wikilink-new: #f0abfc;
+
+  --lat-canvas-tint: rgba(34, 211, 238, 0.07);
+  --lat-canvas-from: #0b1018;
+  --lat-canvas-to: #080c13;
+  --lat-panel: 13 19 29;
+  --lat-panel-alpha: 0.9;
+  --lat-shadow: 0 18px 45px rgba(0, 0, 0, 0.14);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --lat-body: #ffffff;
+  --lat-body-ink: #1e293b;
+
+  --c-slate-950: 255 255 255;   /* page ground */
+  --c-slate-900: 241 245 249;   /* panels */
+  --c-slate-800: 226 232 240;   /* borders */
+  --c-slate-700: 203 213 225;
+  --c-slate-600: 100 116 139;   /* the two border uses at this step */
+  /* The faint tiers. Checked against the panel fill (#f1f5f9) rather than against
+     white, because that is where most of this text actually sits -- against white
+     alone they measure a comfortable 4.8:1 and still fail on a card. Ordered as in
+     dark: 400 the most visible, 600/700 the faintest. Below this there is almost no
+     room; the lightest grey that passes on white at all is around #767676. */
+  --c-text-600: 90 104 126;     /* 5.7:1 on white, 4.9:1 on a tinted row */
+  --c-text-700: 90 104 126;
+  --c-text-800: 90 104 126;
+  --c-slate-500: 87 99 120;     /* 6.0:1 on white, 5.6:1 on a panel */
+  --c-slate-400: 71 85 105;     /* muted text: 7.4:1 */
+  --c-slate-300: 51 65 85;
+  --c-slate-200: 30 41 59;      /* body text: 14.1:1 */
+  --c-slate-100: 15 23 42;      /* headings: 17.9:1 */
+
+  --c-cyan-500: 8 145 178;
+  --c-cyan-400: 14 116 144;     /* accent: 5.4:1 on white. #22d3ee is 1.8:1 -- unusable */
+  --c-cyan-300: 21 94 117;      /* accent, hover: darker on light */
+  --c-cyan-200: 22 78 99;
+
+  --c-indigo-600: 79 70 229;    /* stays saturated: it is a fill carrying white text */
+  --c-indigo-500: 79 70 229;
+  --c-indigo-400: 67 56 202;
+  --c-indigo-300: 55 48 163;
+
+  --c-rose-500: 225 29 72;
+  --c-rose-400: 190 18 60;
+  --c-rose-300: 159 18 57;
+
+  --c-amber-500: 217 119 6;
+  --c-amber-400: 180 83 9;      /* amber is the trap: 400 on white is 1.9:1 */
+  --c-amber-300: 146 64 14;
+
+  --c-emerald-500: 5 150 105;
+  --c-emerald-400: 4 120 87;
+  --c-emerald-300: 6 95 70;
+
+  /* sky-500 is a button fill carrying text-slate-950, which is white here, so it has
+     to be dark enough to hold it: #0ea5e9 gives 2.8:1. */
+  --c-sky-500: 3 105 161;
+  --c-sky-400: 7 89 133;
+  --c-sky-300: 12 74 110;
+  --c-fuchsia-300: 162 28 175;
+
+  --c-veil: 15 23 42;           /* hairlines are ink over a light ground */
+  --c-well: 148 163 184;        /* a recess reads as a soft grey here, not as black */
+
+  /* Light inverts the ordering: the rail recedes behind the content it frames, so it
+     is slightly darker than the page, where on dark it was slightly lighter. */
+  --c-surface-rail: 248 250 252;
+  --c-surface-header: 248 250 252;
+  --c-surface-card: 255 255 255;
+  --c-surface-raised: 255 255 255;
+  --c-surface-notice: 255 255 255;
+
+  /* Pastel link colours are made for a dark ground; on white they are illegible
+     (#93c5fd is 2.1:1). These are the same hues taken down to a readable weight. */
+  --lat-quote-rule: #cbd5e1;
+  --lat-quote-text: #475569;
+  --lat-link: #1d4ed8;
+  --lat-wikilink: #4338ca;
+  --lat-wikilink-rule: rgba(67, 56, 202, 0.4);
+  --lat-wikilink-new: #a21caf;
+
+  --lat-canvas-tint: rgba(14, 116, 144, 0.05);
+  --lat-canvas-from: #f8fafc;
+  --lat-canvas-to: #f1f5f9;
+  --lat-panel: 255 255 255;
+  --lat-panel-alpha: 1;
+  --lat-shadow: 0 10px 30px rgba(15, 23, 42, 0.07);
+}
+
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 html,
@@ -14,8 +179,133 @@ body,
 
 body {
   margin: 0;
-  background: #0b0f17;
-  color: #e5e7eb;
+  background: var(--lat-body);
+  color: var(--lat-body-ink);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease, transform 150ms ease;
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+@layer components {
+  .bg-lattice-canvas {
+    background:
+      radial-gradient(circle at 78% -10%, var(--lat-canvas-tint), transparent 32rem),
+      linear-gradient(180deg, var(--lat-canvas-from) 0%, var(--lat-canvas-to) 100%);
+  }
+
+  .lat-panel {
+    @apply rounded-xl border border-veil/[.07];
+    background: rgb(var(--lat-panel) / var(--lat-panel-alpha));
+    box-shadow: var(--lat-shadow);
+  }
+
+  .lat-panel-header {
+    @apply flex items-center justify-between border-b border-veil/5 px-5 py-4;
+  }
+
+  .lat-kicker {
+    @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600;
+  }
+
+  .lat-primary {
+    @apply inline-flex items-center gap-2 rounded-lg bg-cyan-400 font-medium text-slate-950 hover:bg-cyan-300 disabled:cursor-not-allowed;
+  }
+
+  .lat-secondary {
+    @apply inline-flex items-center gap-2 rounded-lg border border-veil/[.08] bg-veil/[.04] text-slate-300 hover:border-veil/[.14] hover:bg-veil/[.07] hover:text-slate-100;
+  }
+
+  .lat-input {
+    @apply rounded-lg border border-veil/[.08] bg-well/20 text-slate-200 outline-none placeholder:text-slate-700 focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/10;
+  }
+
+  .lat-nav {
+    @apply flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-veil/[.04] hover:text-slate-200;
+  }
+
+  .lat-nav-active {
+    @apply bg-veil/[.06] text-slate-100;
+  }
+
+  /* Thin, unobtrusive scrollbar for panes that scroll inside the chrome
+     (the sidebar column, for one) so the track does not fight the dark UI. */
+  .lat-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+  }
+
+  .lat-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .lat-scroll::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-veil/10;
+  }
+
+  .lat-scroll:hover::-webkit-scrollbar-thumb {
+    @apply bg-veil/20;
+  }
+
+  .lat-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Desktop only. The Electron shell uses a frameless title bar on macOS, so the
+     window controls are drawn over the top-left of the sidebar. Inset the header
+     out from under them, and let that strip drag the window the way a real title
+     bar would. */
+  .lattice-desktop .lat-titlebar {
+    padding-top: 34px;
+    -webkit-app-region: drag;
+  }
+
+  .lattice-desktop .lat-titlebar button,
+  .lattice-desktop .lat-titlebar a {
+    -webkit-app-region: no-drag;
+  }
+
+  .lat-code {
+    @apply rounded bg-veil/[.06] px-1.5 py-0.5 font-mono text-[.85em] text-slate-300;
+  }
+
+  .lat-chip {
+    @apply rounded-full border border-veil/[.08] bg-veil/[.04] px-2.5 py-1 text-[11px] text-slate-400 hover:border-cyan-400/30 hover:text-cyan-300;
+  }
+
+  .lat-status {
+    @apply inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide;
+  }
+
+  .status-inbox {
+    @apply border-slate-700/70 bg-slate-800/40 text-slate-500;
+  }
+
+  .status-reading {
+    @apply border-amber-400/20 bg-amber-400/10 text-amber-300;
+  }
+
+  .status-read {
+    @apply border-emerald-400/20 bg-emerald-400/10 text-emerald-300;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ---- PDF.js text layer (selectable, positioned text over the canvas) ---- */
@@ -124,21 +414,21 @@ body {
   font-size: 0.9em;
 }
 .lat-prose blockquote {
-  border-left: 3px solid #475569;
+  border-left: 3px solid var(--lat-quote-rule);
   padding-left: 0.8em;
-  color: #94a3b8;
+  color: var(--lat-quote-text);
   margin: 0.5em 0;
 }
 .lat-prose a {
-  color: #93c5fd;
+  color: var(--lat-link);
 }
 .lat-wikilink {
-  color: #a5b4fc;
+  color: var(--lat-wikilink);
   text-decoration: none;
-  border-bottom: 1px solid rgba(165, 180, 252, 0.4);
+  border-bottom: 1px solid var(--lat-wikilink-rule);
   cursor: pointer;
 }
 .lat-wikilink-new {
-  color: #f0abfc;
+  color: var(--lat-wikilink-new);
   border-bottom-style: dashed;
 }

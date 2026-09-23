@@ -5,18 +5,37 @@ import { clearPdfs, getPdf, putPdf } from "./blobStore";
 const MANIFEST = "workspace.json";
 
 export function parseWorkspaceSnapshot(value: unknown): WorkspaceSnapshot {
-  const snapshot = value as Partial<WorkspaceSnapshot> | null;
+  const snapshot = value as ({
+    version?: number;
+    exportedAt?: string;
+    papers?: WorkspaceSnapshot["papers"];
+    collections?: WorkspaceSnapshot["collections"];
+    highlights?: WorkspaceSnapshot["highlights"];
+    notes?: WorkspaceSnapshot["notes"];
+    questions?: WorkspaceSnapshot["questions"];
+    savedSearches?: WorkspaceSnapshot["savedSearches"];
+    plans?: unknown;
+    brain?: unknown;
+  }) | null;
   if (
     !snapshot ||
-    snapshot.version !== 1 ||
+    (snapshot.version !== 1 && snapshot.version !== 2 && snapshot.version !== 3) ||
     !Array.isArray(snapshot.papers) ||
     !Array.isArray(snapshot.collections) ||
     !Array.isArray(snapshot.highlights) ||
-    !Array.isArray(snapshot.notes)
+    !Array.isArray(snapshot.notes) ||
+    (snapshot.version >= 2 && !Array.isArray(snapshot.questions)) ||
+    (snapshot.version === 3 && !Array.isArray(snapshot.savedSearches))
   ) {
     throw new Error("This is not a valid lattice workspace backup.");
   }
-  return snapshot as WorkspaceSnapshot;
+  // v1 archives predate companion questions. Upgrade them in memory.
+  return {
+    ...snapshot,
+    version: 3,
+    questions: Array.isArray(snapshot.questions) ? snapshot.questions : [],
+    savedSearches: Array.isArray(snapshot.savedSearches) ? snapshot.savedSearches : [],
+  } as WorkspaceSnapshot;
 }
 
 export async function createWorkspaceBackup(): Promise<Blob> {

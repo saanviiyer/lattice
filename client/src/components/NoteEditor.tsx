@@ -7,18 +7,30 @@
 // inside every block. This is a lightweight, self-contained block model (not TipTap):
 // blocks serialize to Markdown so backlinks, the graph, and the Supabase path all keep
 // working on the same string form. See lib/blocks.ts.
+//
+// Markdown shortcuts work the way they do in Notion: typing "- " or "* " at the start
+// of a line turns it into a bullet immediately (likewise "1. ", "# ", "> ", "[] "),
+// and Tab / Shift+Tab nests and un-nests a list item, carrying its own nested items
+// with it.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Note, Paper } from "../types";
 import {
   blocksToMarkdown,
+  clampIndent,
   emptyBlock,
+  isListType,
+  listNumbering,
+  markdownShortcut,
   markdownToBlocks,
+  MAX_INDENT,
   SLASH_COMMANDS,
   type Block,
   type BlockType,
 } from "../lib/blocks";
 import { backlinksFor, buildTitleIndex } from "../lib/graph";
+import { markForShortcut, toggleMark, toggleWikilink, type InlineMark } from "../lib/inlineFormat";
+import { parseInlineMarkdown } from "../lib/inlineMarkdown";
 import { normalizeTitle, parseWikilinks } from "../lib/wikilink";
 
 interface LinkTarget {
@@ -52,6 +64,12 @@ export default function NoteEditor({
   const [blocks, setBlocks] = useState<Block[]>(() => markdownToBlocks(note.body));
   const [menu, setMenu] = useState<Menu>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  // The block being edited shows its raw Markdown; every other block shows the
+  // formatting rendered. This is what makes **bold** look bold while you work
+  // without giving up a plain-Markdown note body.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  // A non-empty selection inside a block, for the formatting toolbar.
+  const [selection, setSelection] = useState<{ blockId: string; start: number; end: number } | null>(null);
 
   const taRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
   const focusReq = useRef<{ id: string; caret: number } | null>(null);
@@ -150,10 +168,23 @@ export default function NoteEditor({
     commit(blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)));
   }
 
-  // ---- Change handler: text + menu detection ----
+  // ---- Change handler: markdown shortcuts + text + menu detection ----
   function onChange(b: Block, e: React.ChangeEvent<HTMLTextAreaElement>) {
     const value = e.target.value;
     const caret = e.target.selectionStart;
+
+    // "- " at the start of a paragraph becomes a bullet as you type it. Only when
+    // the caret sits right after the marker, so pasting a whole Markdown list into
+    // the middle of a line does not silently restyle the block.
+    if (b.type === "p" && caret === value.length - lengthAfterMarker(value)) {
+      const shortcut = markdownShortcut(value);
+      if (shortcut) {
+        applyShortcut(b, shortcut);
+        autoGrow(e.target);
+        return;
+      }
+    }
+
     const next = blocks.map((x) => (x.id === b.id ? { ...x, text: value } : x));
     commit(next);
     autoGrow(e.target);
@@ -172,6 +203,100 @@ export default function NoteEditor({
       return;
     }
     setMenu(null);
+  }
+
+  // How much of the line survives the marker, so the caret check above can tell
+  // "typing the marker" from "editing text that happens to start with one".
+  function lengthAfterMarker(value: string): number {
+    return markdownShortcut(value)?.text.length ?? -1;
+  }
+
+  // Turn a block into the type its Markdown marker names, eating the marker.
+  function applyShortcut(b: Block, shortcut: ReturnType<typeof markdownShortcut>) {
+    if (!shortcut) return;
+    setMenu(null);
+    if (shortcut.type === "divider") {
+      const nb = emptyBlock("p");
+      commit(blocks.flatMap((x) => (x.id === b.id ? [{ ...x, type: "divider" as BlockType, text: "" }, nb] : [x])));
+      focusReq.current = { id: nb.id, caret: 0 };
+      return;
+    }
+    commit(
+      blocks.map((x) =>
+        x.id === b.id
+          ? { ...x, type: shortcut.type, text: shortcut.text, checked: shortcut.checked }
+          : x
+      )
+    );
+    focusReq.current = { id: b.id, caret: shortcut.text.length };
+  }
+
+  /**
+   * Nest or un-nest a list item by one level (Tab / Shift+Tab).
+   *
+   * A block can only go one level deeper than the item above it — otherwise the
+   * list would show a gap no renderer could represent — and its own nested items
+   * move with it, so indenting a parent does not tear its children off.
+   */
+  function shiftIndent(b: Block, delta: 1 | -1, caret: number) {
+    const idx = blocks.findIndex((x) => x.id === b.id);
+    if (idx < 0 || !isListType(b.type)) return;
+    const current = clampIndent(b.indent);
+    if (delta > 0) {
+      const previous = blocks[idx - 1];
+      const ceiling = previous && isListType(previous.type) ? clampIndent(previous.indent) + 1 : 0;
+      if (current >= Math.min(ceiling, MAX_INDENT)) return;
+    } else if (current === 0) return;
+
+    // Everything directly below at a deeper level belongs to this item.
+    let end = idx + 1;
+    while (
+      end < blocks.length &&
+      isListType(blocks[end].type) &&
+      clampIndent(blocks[end].indent) > current
+    ) {
+      end += 1;
+    }
+    commit(
+      blocks.map((x, i) =>
+        i >= idx && i < end ? { ...x, indent: clampIndent(clampIndent(x.indent) + delta) } : x
+      )
+    );
+    focusReq.current = { id: b.id, caret };
+  }
+
+  /** Apply a mark to the selection in a block, keeping the words selected after. */
+  function applyMark(blockId: string, mark: InlineMark | "link") {
+    const area = taRefs.current.get(blockId);
+    const block = blocks.find((item) => item.id === blockId);
+    if (!area || !block) return;
+    const start = area.selectionStart;
+    const end = area.selectionEnd;
+    const result =
+      mark === "link"
+        ? toggleWikilink(block.text, start, end)
+        : toggleMark(block.text, start, end, mark);
+    commit(blocks.map((item) => (item.id === blockId ? { ...item, text: result.text } : item)));
+    // Restore the selection after React has written the new value back.
+    requestAnimationFrame(() => {
+      const current = taRefs.current.get(blockId);
+      if (!current) return;
+      current.focus();
+      current.setSelectionRange(result.selectionStart, result.selectionEnd);
+      setSelection(
+        result.selectionEnd > result.selectionStart
+          ? { blockId, start: result.selectionStart, end: result.selectionEnd }
+          : null
+      );
+    });
+  }
+
+  /** Remember a selection so the toolbar knows where to appear and what to act on. */
+  function trackSelection(blockId: string, area: HTMLTextAreaElement) {
+    const { selectionStart, selectionEnd } = area;
+    setSelection(
+      selectionEnd > selectionStart ? { blockId, start: selectionStart, end: selectionEnd } : null
+    );
   }
 
   // ---- Menu selection ----
@@ -250,6 +375,24 @@ export default function NoteEditor({
     const caret = ta.selectionStart;
     const atStart = caret === 0 && ta.selectionEnd === 0;
 
+    // The shortcuts everybody already has in their fingers.
+    if (e.metaKey || e.ctrlKey) {
+      const mark = markForShortcut(e.key);
+      if (mark) {
+        e.preventDefault();
+        applyMark(b.id, mark);
+        return;
+      }
+    }
+
+    // Tab nests a list item; Shift+Tab lifts it back out. On anything else Tab is
+    // left alone so it still moves focus out of the editor for keyboard users.
+    if (e.key === "Tab" && isListType(b.type)) {
+      e.preventDefault();
+      shiftIndent(b, e.shiftKey ? -1 : 1, caret);
+      return;
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       // Code blocks: Enter inserts a newline; a trailing blank line exits the block.
       if (b.type === "code") {
@@ -268,16 +411,19 @@ export default function NoteEditor({
 
       e.preventDefault();
       const idx = blocks.findIndex((x) => x.id === b.id);
-      const isList = b.type === "bullet" || b.type === "number" || b.type === "todo";
-      // Enter on an empty list item ends the list (turns it into a paragraph).
+      const isList = isListType(b.type);
+      // Enter on an empty list item steps back out one level at a time, and ends
+      // the list once it is back at the margin.
       if (isList && b.text.trim() === "") {
-        commit(blocks.map((x) => (x.id === b.id ? { ...x, type: "p" } : x)));
+        if (clampIndent(b.indent) > 0) shiftIndent(b, -1, 0);
+        else commit(blocks.map((x) => (x.id === b.id ? { ...x, type: "p", indent: 0 } : x)));
         return;
       }
       const before = b.text.slice(0, caret);
       const after = b.text.slice(caret);
       const nextType: BlockType = isList ? b.type : "p";
-      const nb: Block = { ...emptyBlock(nextType), text: after };
+      // A new item starts at the same depth as the one it was split from.
+      const nb: Block = { ...emptyBlock(nextType), text: after, indent: isList ? clampIndent(b.indent) : 0 };
       const next = [
         ...blocks.slice(0, idx),
         { ...b, text: before },
@@ -290,10 +436,17 @@ export default function NoteEditor({
     }
 
     if (e.key === "Backspace" && atStart) {
+      // Backspace at the start of a nested item lifts it one level first, so a
+      // deeply nested bullet is not flattened to a paragraph in a single press.
+      if (isListType(b.type) && clampIndent(b.indent) > 0) {
+        e.preventDefault();
+        shiftIndent(b, -1, 0);
+        return;
+      }
       if (b.type !== "p") {
         // Backspace at the start of a styled block turns it back into a paragraph.
         e.preventDefault();
-        setBlock(b.id, { type: "p", checked: undefined });
+        setBlock(b.id, { type: "p", checked: undefined, indent: 0 });
         return;
       }
       const idx = blocks.findIndex((x) => x.id === b.id);
@@ -327,18 +480,9 @@ export default function NoteEditor({
     focusReq.current = { id: nb.id, caret: 0 };
   }
 
-  // Running numbers for consecutive numbered-list blocks.
-  const numbering = useMemo(() => {
-    const map = new Map<string, number>();
-    let n = 0;
-    for (const b of blocks) {
-      if (b.type === "number") {
-        n += 1;
-        map.set(b.id, n);
-      } else n = 0;
-    }
-    return map;
-  }, [blocks]);
+  // Running numbers for ordered-list blocks, from the same helper the Markdown
+  // serializer uses, so what you see is what gets written to the note body.
+  const numbering = useMemo(() => listNumbering(blocks), [blocks]);
 
   const registerRef = (id: string) => (el: HTMLTextAreaElement | null) => {
     if (el) {
@@ -375,15 +519,16 @@ export default function NoteEditor({
                     <hr className="border-slate-700" />
                   </div>
                 ) : (
-                  <div className="flex items-start gap-2">
-                    {b.type === "bullet" && (
-                      <span className="mt-2 text-slate-400 select-none leading-none">
-                        •
-                      </span>
-                    )}
+                  <div
+                    className="flex items-start gap-2"
+                    // 22px a level: enough to read the nesting, small enough that a
+                    // deep list still has room for its text.
+                    style={isListType(b.type) ? { paddingLeft: clampIndent(b.indent) * 22 } : undefined}
+                  >
+                    {b.type === "bullet" && <Bullet depth={clampIndent(b.indent)} />}
                     {b.type === "number" && (
                       <span className="mt-1 text-slate-400 select-none tabular-nums text-sm">
-                        {numbering.get(b.id)}.
+                        {orderedMarker(numbering.get(b.id) || 1, clampIndent(b.indent))}
                       </span>
                     )}
                     {b.type === "todo" && (
@@ -400,21 +545,79 @@ export default function NoteEditor({
                       rows={1}
                       onChange={(e) => onChange(b, e)}
                       onKeyDown={(e) => onKeyDown(b, e)}
+                      onFocus={() => setEditingId(b.id)}
+                      // onSelect alone is unreliable across browsers for a
+                      // textarea; mouse-up and key-up are what actually fire when
+                      // a person drags or shift-arrows over a phrase.
+                      onSelect={(e) => trackSelection(b.id, e.currentTarget)}
+                      onMouseUp={(e) => trackSelection(b.id, e.currentTarget)}
+                      onKeyUp={(e) => trackSelection(b.id, e.currentTarget)}
                       onBlur={() =>
                         setTimeout(() => {
                           setMenu((m) => (m && m.blockId === b.id ? null : m));
+                          setEditingId((id) => (id === b.id ? null : id));
+                          setSelection((sel) => (sel && sel.blockId === b.id ? null : sel));
                         }, 150)
                       }
                       placeholder={
                         b.type === "p"
-                          ? "Type text, or press / for blocks"
+                          ? "Type text, / for blocks, - for a bullet"
                           : b.type === "code"
                           ? "code"
                           : ""
                       }
                       spellCheck={b.type !== "code"}
-                      className={blockClass(b)}
+                      className={`${blockClass(b)} ${
+                        // Hidden rather than unmounted: the textarea keeps its
+                        // scroll height, so swapping between the two never moves
+                        // the line the cursor is about to land on.
+                        editingId === b.id || !hasMarks(b.text) ? "" : "invisible absolute inset-0"
+                      }`}
                     />
+                    {editingId !== b.id && hasMarks(b.text) && (
+                      <div
+                        onMouseDown={(event) => {
+                          // Put the caret where it was clicked, not at the end.
+                          const offset = caretOffsetFromPoint(event);
+                          setEditingId(b.id);
+                          focusReq.current = { id: b.id, caret: offset ?? b.text.length };
+                          event.preventDefault();
+                        }}
+                        className={`${blockClass(b)} cursor-text whitespace-pre-wrap`}
+                      >
+                        <FormattedText text={b.text} />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Formatting toolbar, shown while text is selected in this block.
+                    Above the line rather than over it, so it never covers the
+                    words it is about to change. */}
+                {selection && selection.blockId === b.id && (
+                  <div className="absolute -top-9 left-0 z-30 flex items-center gap-0.5 rounded-lg border border-veil/10 bg-surface-raised p-1 shadow-2xl shadow-black/50">
+                    {([
+                      ["bold", "B", "Bold", "font-bold"],
+                      ["italic", "I", "Italic", "italic font-serif"],
+                      ["code", "<>", "Code", "font-mono text-[11px]"],
+                      ["link", "[[ ]]", "Link to a paper or note", "font-mono text-[11px]"],
+                    ] as const).map(([mark, glyph, title, className]) => (
+                      <button
+                        key={mark}
+                        type="button"
+                        // Keep the textarea's selection: a click that moves focus
+                        // first would leave nothing to format.
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          applyMark(b.id, mark);
+                        }}
+                        title={`${title}${mark === "bold" ? " (⌘B)" : mark === "italic" ? " (⌘I)" : mark === "code" ? " (⌘E)" : " (⌘K)"}`}
+                        aria-label={title}
+                        className={`grid h-7 min-w-7 place-items-center rounded-md px-1.5 text-slate-300 hover:bg-veil/[.08] hover:text-slate-100 ${className}`}
+                      >
+                        {glyph}
+                      </button>
+                    ))}
                   </div>
                 )}
 
@@ -539,6 +742,115 @@ export default function NoteEditor({
       </aside>
     </div>
   );
+}
+
+/** Does this line contain anything worth rendering differently? */
+function hasMarks(text: string): boolean {
+  return /(\*\*[^*]+\*\*)|(`[^`]+`)|(\*[^*\n]+\*)|(\[\[[^\]]+\]\])/.test(text);
+}
+
+/** A line's inline Markdown, rendered. Wikilinks are shown without their brackets. */
+function FormattedText({ text }: { text: string }) {
+  const parts: React.ReactNode[] = [];
+  // Wikilinks first: they are the app's own syntax and sit outside Markdown.
+  const segments = text.split(/(\[\[[^\]]+\]\])/g);
+  segments.forEach((segment, index) => {
+    const link = segment.match(/^\[\[([^\]]+)\]\]$/);
+    if (link) {
+      parts.push(
+        <span key={`l${index}`} className="lat-wikilink">
+          {link[1]}
+        </span>
+      );
+      return;
+    }
+    for (const [i, token] of parseInlineMarkdown(segment).entries()) {
+      const key = `${index}-${i}`;
+      if (token.type === "bold") parts.push(<strong key={key} className="font-semibold text-slate-100">{token.value}</strong>);
+      else if (token.type === "italic") parts.push(<em key={key}>{token.value}</em>);
+      else if (token.type === "code") parts.push(<code key={key} className="lat-code">{token.value}</code>);
+      else parts.push(<span key={key}>{token.value}</span>);
+    }
+  });
+  return <>{parts}</>;
+}
+
+/** Character offset of a click inside rendered text, so the caret lands there. */
+function caretOffsetFromPoint(event: React.MouseEvent<HTMLDivElement>): number | null {
+  const target = event.currentTarget;
+  const doc = document as Document & {
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  };
+  const range = doc.caretRangeFromPoint?.(event.clientX, event.clientY);
+  if (!range) return null;
+  const measure = document.createRange();
+  measure.selectNodeContents(target);
+  try {
+    measure.setEnd(range.startContainer, range.startOffset);
+  } catch {
+    return null;
+  }
+  // Length of the rendered text before the click. Close enough for a caret: the
+  // delimiters are hidden, so this is the offset in the visible text.
+  return measure.toString().length;
+}
+
+// The bullet changes shape with depth, the way it does in a word processor, so the
+// level is readable even where the indent alone is ambiguous. Drawn rather than
+// typed: the "•" character renders far too small next to body text at this size.
+const BULLET_STYLES = ["solid", "hollow", "square"] as const;
+
+function Bullet({ depth }: { depth: number }) {
+  const style = BULLET_STYLES[depth % BULLET_STYLES.length];
+  return (
+    <span aria-hidden="true" className="mt-[0.55em] flex h-[7px] w-[7px] shrink-0 items-center justify-center">
+      <span
+        className={
+          style === "square"
+            ? "h-[6px] w-[6px] bg-slate-400"
+            : style === "hollow"
+            ? "h-[7px] w-[7px] rounded-full border-[1.5px] border-slate-400"
+            : "h-[7px] w-[7px] rounded-full bg-slate-400"
+        }
+      />
+    </span>
+  );
+}
+
+// 1. / a. / i. by depth, cycling. Only the display changes: the note body is always
+// written back as plain "1." Markdown.
+function orderedMarker(n: number, indent: number): string {
+  const style = indent % 3;
+  if (style === 1) return `${toLetters(n)}.`;
+  if (style === 2) return `${toRoman(n)}.`;
+  return `${n}.`;
+}
+
+function toLetters(n: number): string {
+  let out = "";
+  let value = n;
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    out = String.fromCharCode(97 + remainder) + out;
+    value = Math.floor((value - 1) / 26);
+  }
+  return out || "a";
+}
+
+function toRoman(n: number): string {
+  const table: Array<[number, string]> = [
+    [1000, "m"], [900, "cm"], [500, "d"], [400, "cd"], [100, "c"], [90, "xc"],
+    [50, "l"], [40, "xl"], [10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"],
+  ];
+  let value = Math.max(1, Math.min(3999, n));
+  let out = "";
+  for (const [amount, numeral] of table) {
+    while (value >= amount) {
+      out += numeral;
+      value -= amount;
+    }
+  }
+  return out;
 }
 
 // Per-block-type styling for the textarea. Shared base keeps it a seamless block.

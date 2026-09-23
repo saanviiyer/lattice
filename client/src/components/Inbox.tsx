@@ -23,7 +23,7 @@ export default function Inbox({
   const [clippings, setClippings] = useState<Clipping[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  // Per-clipping chosen collection name (defaults to the clipping's own).
+  // Per-clipping chosen project name (defaults to the one the clipper sent).
   const [targets, setTargets] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
 
@@ -157,7 +157,7 @@ export default function Inbox({
                     onChange={(e) =>
                       setTargets((t) => ({ ...t, [c.id]: e.target.value }))
                     }
-                    placeholder="Collection (optional)"
+                    placeholder="Project (optional)"
                     className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm w-56 outline-none focus:border-indigo-500"
                   />
                   <datalist id={`collections-${c.id}`}>
@@ -168,7 +168,7 @@ export default function Inbox({
                   <button
                     onClick={() => void doImport(c)}
                     disabled={busy[c.id]}
-                    className="bg-indigo-600 hover:bg-indigo-500 rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50"
+                    className="bg-indigo-600 text-white hover:bg-indigo-500 rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50"
                   >
                     {busy[c.id] ? "Importing…" : "Import"}
                   </button>

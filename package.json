@@ -10,21 +10,30 @@
     "dev:client": "npm --prefix client run dev",
     "build": "npm --prefix client run build",
     "start": "NODE_ENV=production node server/index.js",
-    "test": "npm --prefix client run test",
-    "postinstall": "npm --prefix client install"
+    "test": "npm --prefix client run test && node --test server/ai.test.js server/arxiv.test.js server/openAccess.test.js server/openAccess.ratelimit.test.js server/suggest.test.js server/plan.test.js desktop/serve.test.mjs && npm --prefix mcp run test",
+    "postinstall": "npm --prefix client install",
+    "desktop": "npm run build && electron .",
+    "desktop:dev": "electron .",
+    "desktop:build": "npm run build && node scripts/package-desktop.mjs",
+    "desktop:smoke": "LATTICE_SMOKE=1 electron . --user-data-dir=\"$(mktemp -d)\"",
+    "mcp:build": "npm --prefix mcp install && npm --prefix mcp run build"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.68.0",
+    "@anthropic-ai/sdk": "^0.125.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "multer": "^2.2.0",
-    "unpdf": "^0.12.2"
+    "unpdf": "^0.12.2",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "@electron/packager": "^18.4.4",
+    "concurrently": "^9.1.2",
+    "electron": "^33.4.11"
   },
   "overrides": {
     "tar": "^7.5.22"
-  }
+  },
+  "main": "desktop/main.cjs"
 }
