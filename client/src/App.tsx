@@ -6,7 +6,7 @@ import { ThemeToggle } from "./components/ThemeToggle";
 import { SuggestedReading } from "./components/SuggestedReading";
 import { useResolvedTheme } from "./lib/theme";
 import { deletePdf, getPdf, putPdf } from "./lib/blobStore";
-import { draftPlanWithClaude, getHealth, metadataByDoi, metadataFromPdf, type SuggestResult, type SuggestedPaper } from "./lib/api";
+import { draftPlanWithClaude, getHealth, metadataByArxiv, metadataByDoi, metadataFromPdf, type SuggestResult } from "./lib/api";
 import { attachOpenAccessPdf, attachOpenAccessPdfs, canAutoAttach } from "./lib/autoPdf";
 import { buildGraph } from "./lib/graph";
 import { matchesLibraryQuery } from "./lib/librarySearch";
@@ -110,7 +110,7 @@ export default function App() {
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [smartFilter, setSmartFilter] = useState<SmartFilter>(null);
   const [savedSearchId, setSavedSearchId] = useState<string | null>(null);
-  const [health, setHealth] = useState<{ mockMode: boolean; model: string; planning?: boolean } | null>(
+  const [health, setHealth] = useState<{ mockMode: boolean; model: string; planning?: boolean; discovery?: boolean } | null>(
     null
   );
   const [backupStatus, setBackupStatus] = useState("");
@@ -153,7 +153,7 @@ export default function App() {
 
   useEffect(() => {
     getHealth()
-      .then((h) => setHealth({ mockMode: h.mockMode, model: h.model, planning: !!h.planning }))
+      .then((h) => setHealth({ mockMode: h.mockMode, model: h.model, planning: !!h.planning, discovery: !!h.discovery }))
       .catch(() => setHealth(null));
   }, []);
 
@@ -298,6 +298,23 @@ export default function App() {
       offOpenPdf();
       window.removeEventListener("beforeunload", flush);
     };
+  }, [refresh, libraryLoaded]);
+
+  // On the public web demo (the GitHub Pages host), start with the sample workspace
+  // so the tool is not empty on a first visit. This runs only on *.github.io, only
+  // once per browser, and only when the library is empty, so local and desktop use
+  // is untouched and a visitor who removes the sample will not have it reappear.
+  useEffect(() => {
+    if (!libraryLoaded) return;
+    try {
+      if (!/(^|\.)github\.io$/.test(location.hostname)) return;
+      if (localStorage.getItem("lattice.demo.seeded")) return;
+      if (repo.listPapers().length === 0 && !hasSampleWorkspace(repo)) {
+        seedSampleWorkspace(repo);
+        localStorage.setItem("lattice.demo.seeded", "1");
+        refresh();
+      }
+    } catch {}
   }, [refresh, libraryLoaded]);
 
   // Read current state from the repository on every render (cheap; localStorage).
@@ -625,16 +642,32 @@ export default function App() {
 
   /**
    * Add a suggested paper. The suggestion carries enough to file it immediately, but
-   * the DOI lookup returns the full record (authors, venue, abstract as the publisher
-   * has it), so the library never holds a thinner copy than adding it by hand would.
-   * If the lookup fails -- offline, or the DOI is not registered where we ask -- what
-   * the suggestion already told us is still worth keeping.
+   * the lookup returns the full record (authors, venue, abstract as the publisher or
+   * arXiv has it), so the library never holds a thinner copy than adding it by hand
+   * would. If the lookup fails -- offline, or the id is not registered where we ask --
+   * what the suggestion already told us is still worth keeping.
+   *
+   * A suggestion from the citation graph has a DOI; one from an arXiv search has an
+   * arXiv id instead, so either is enough to add it.
    */
   const addSuggestedPaper = useCallback(
-    async (suggestion: SuggestedPaper, projectId: string) => {
+    async (
+      suggestion: {
+        doi?: string;
+        arxivId?: string;
+        title: string;
+        authors: string[];
+        year: number | null;
+        venue: string;
+        abstract: string;
+      },
+      projectId: string
+    ) => {
+      const doi = suggestion.doi?.trim();
+      const arxivId = suggestion.arxivId?.trim();
       let meta: PaperMetadata;
       try {
-        meta = (await metadataByDoi(suggestion.doi)).paper;
+        meta = doi ? (await metadataByDoi(doi)).paper : (await metadataByArxiv(arxivId!)).paper;
       } catch {
         meta = {
           title: suggestion.title,
@@ -642,9 +675,10 @@ export default function App() {
           year: suggestion.year,
           venue: suggestion.venue,
           abstract: suggestion.abstract,
-          doi: suggestion.doi,
-          url: `https://doi.org/${suggestion.doi}`,
-          source: "doi",
+          doi: doi || "",
+          arxivId: arxivId || undefined,
+          url: doi ? `https://doi.org/${doi}` : `https://arxiv.org/abs/${arxivId}`,
+          source: doi ? "doi" : "arxiv",
         } as PaperMetadata;
       }
       const paper = repo.addPaper(meta, { collectionIds: projectId ? [projectId] : [] });
@@ -1758,6 +1792,7 @@ export default function App() {
             papers={papers}
             collections={collections}
             plans={plans}
+            canDiscover={!!health?.discovery}
             onUpdatePrefs={(patch) => { repo.updateBrain(patch); refresh(); }}
             onOpenPaper={openPaper}
             onOpenPlan={(id) => setView({ kind: "plan", id })}
@@ -1903,6 +1938,9 @@ export default function App() {
           notes={notes}
           questions={questions}
           initialIds={exportingIds}
+          plans={plans}
+          interests={brainPrefs.interests}
+          highlightsFor={(paperId) => repo.listHighlights(paperId)}
           onClose={() => setExportingIds(null)}
           onNotice={showNotice}
         />
